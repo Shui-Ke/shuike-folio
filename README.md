@@ -25,6 +25,22 @@ Bruno Simon 的 [folio-2025](https://github.com/brunosimon/folio-2025) 里的汽
 `game/` 与 `bruno-original/dist/` 内容一致，只去掉了 `sounds/musics/` 里三首曲子的 `.wav` 源文件
 （约 130MB），保留实际加载的 `.mp3`，所以试玩音频不受影响。
 
+## 截图与图标
+
+![封面](shots/cover-1200x630.png)
+
+| 文件 | 尺寸 | 用途 |
+| --- | --- | --- |
+| [`shots/cover-1200x630.png`](shots/cover-1200x630.png) | 1200 × 630 | 项目封面 / Open Graph（带标题版） |
+| [`shots/cover-plain-1200x630.png`](shots/cover-plain-1200x630.png) | 1200 × 630 | 同上，纯截图无文字 |
+| [`shots/desktop-1440x900.png`](shots/desktop-1440x900.png) | 1440 × 900 | 桌面截图（首页） |
+| [`shots/mobile-390x844.png`](shots/mobile-390x844.png) | 390 × 844 | 手机截图（游戏中） |
+| [`shots/icon-180.png`](shots/icon-180.png) | 180 × 180 | App 图标 |
+| [`shots/favicon-32.png`](shots/favicon-32.png) | 32 × 32 | 网站图标 |
+| [`shots/icon-1024.png`](shots/icon-1024.png) | 1024 × 1024 | 图标源文件 |
+
+站点的 favicon 与 `og:image` 已经接到 `game/` 里（`favicon-32.png`、`favicon-180.png`、`apple-touch-icon-180.png`、`og-cover.png`）。
+
 ## 来源与许可
 
 - 代码：MIT，© 2025 Bruno Simon，全文见 [`bruno-original/license.md`](bruno-original/license.md)
