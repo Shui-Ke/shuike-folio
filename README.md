@@ -3,7 +3,7 @@
 Bruno Simon 的 [folio-2025](https://github.com/brunosimon/folio-2025) 里的汽车场景：
 开一辆低模车在程序化地形里跑，草、落叶、雨雪、昼夜与风全部实时。
 
-**在线试玩：<https://shui-ke.github.io/shuike-look/>**
+**在线试玩：<https://shui-ke.github.io/shuike-folio/>**
 
 | 操作 | 作用 |
 | --- | --- |
