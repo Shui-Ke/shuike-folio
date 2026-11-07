@@ -1,0 +1,106 @@
+html,
+body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #111713;
+}
+
+.game {
+    background: #111713;
+}
+
+.js-canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    outline: none;
+}
+
+.clean-menu-trigger {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 10;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 11px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(20, 16, 24, 0.5);
+    color: rgba(255, 255, 255, 0.75);
+    font-family: "Pally-Regular", "Segoe UI", sans-serif;
+    font-size: 9px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    cursor: pointer;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    pointer-events: auto;
+    transition: border-color 150ms ease, color 150ms ease, background 150ms ease;
+}
+
+.clean-menu-trigger span {
+    color: #ff8641;
+}
+
+.clean-menu-trigger:hover {
+    border-color: #ff8641;
+    color: #ffffff;
+    background: rgba(255, 134, 65, 0.1);
+}
+
+.esc-menu-open .clean-menu-trigger {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.clean-hud {
+    position: fixed;
+    left: 22px;
+    bottom: 22px;
+    z-index: 10;
+    pointer-events: none;
+    color: #eef3ec;
+    font-family: "Pally-Regular", "Segoe UI", sans-serif;
+    text-shadow: 0 2px 14px rgba(0, 0, 0, 0.55);
+}
+
+.clean-hud__eyebrow {
+    color: #e5b567;
+    font-size: 9px;
+    letter-spacing: 0.22em;
+    font-weight: 700;
+    margin-bottom: 7px;
+}
+
+.clean-hud__controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    color: rgba(238, 243, 236, 0.72);
+    font-size: 10px;
+    letter-spacing: 0.02em;
+}
+
+.clean-hud__controls b {
+    color: #eef3ec;
+    font-weight: 600;
+}
+
+.touch-buttons .list {
+    display: none;
+}
+
+@media (max-width: 640px) {
+    .clean-hud {
+        left: 16px;
+        bottom: 16px;
+    }
+
+    .clean-hud__controls {
+        max-width: 260px;
+        gap: 4px 10px;
+        font-size: 9px;
+    }
+}

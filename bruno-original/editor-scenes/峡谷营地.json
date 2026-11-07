@@ -1,0 +1,283 @@
+{
+  "format": "bruno-scene",
+  "version": 1,
+  "name": "峡谷营地",
+  "units": "metres",
+  "terrain": "bruno",
+  "terrainAsset": null,
+  "objects": [
+    {
+      "id": "99a88fb1-1556-41fd-885d-0bb6c6c4c8f5",
+      "name": "白桦",
+      "asset": "wasteland/library/树木/白桦_视觉.glb",
+      "position": [
+        -45.98184714982662,
+        -1.026962516258874,
+        -37.76762923571087
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        2.1966875919572035,
+        1.1035265225498607,
+        1.5183042353613112
+      ],
+      "collision": null
+    },
+    {
+      "id": "f67b27b3-8d4a-41c3-8746-23856f52653b",
+      "name": "樱花树",
+      "asset": "wasteland/library/树木/樱花树_视觉.glb",
+      "position": [
+        34.9592580750744,
+        0,
+        74.1502512627938
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "collision": null
+    },
+    {
+      "id": "17d21e37-cccc-4c95-86c6-dc19513e84ba",
+      "name": "橡树",
+      "asset": "wasteland/library/树木/橡树_视觉.glb",
+      "position": [
+        40.298121758703346,
+        0,
+        69.5633246618125
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "collision": null
+    },
+    {
+      "id": "925488b4-aedf-4679-a4d9-b89b7efdf7df",
+      "name": "橡树",
+      "asset": "wasteland/library/树木/橡树_视觉.glb",
+      "position": [
+        24.710401620751696,
+        -0.05843348056077957,
+        66.3399135453247
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "collision": null
+    },
+    {
+      "id": "03a755c0-11ab-4bba-b4bd-ba781f67643e",
+      "name": "白桦",
+      "asset": "wasteland/library/树木/白桦_视觉.glb",
+      "position": [
+        22.27103367227169,
+        0,
+        74.39966593555562
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "collision": null
+    },
+    {
+      "id": "05ebd8d8-1981-4cb4-9880-bde6315836fa",
+      "name": "砖块",
+      "asset": "wasteland/library/道具/砖块.glb",
+      "position": [
+        74.03458493819198,
+        0.013955003584665393,
+        -23.779750946486175
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "collision": null
+    },
+    {
+      "id": "384a1244-390e-4097-921e-549e75de90d2",
+      "name": "砖块",
+      "asset": "wasteland/library/道具/砖块.glb",
+      "position": [
+        72.92444422836019,
+        -0.07058770040501461,
+        -23.42936224858797
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "collision": null
+    },
+    {
+      "id": "7f1d0cef-8919-4a75-9692-38c81a658eb4",
+      "name": "玄武岩_02",
+      "asset": "wasteland/library/岩石/玄武岩_02.glb",
+      "position": [
+        72.85030473826505,
+        -2.5487936922947063,
+        -28.89392622659997
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "collision": null
+    },
+    {
+      "id": "2094b1d8-e939-4290-a547-204d0465301e",
+      "name": "砖块",
+      "asset": "wasteland/library/道具/砖块.glb",
+      "position": [
+        71.8842614908573,
+        -0.011787704614071887,
+        -24.540409157709036
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "collision": null
+    },
+    {
+      "id": "da31678b-8971-46a0-818b-61dcad5df5b3",
+      "name": "砖块",
+      "asset": "wasteland/library/道具/砖块.glb",
+      "position": [
+        72.89660035290655,
+        -0.3769807262797258,
+        -24.58183273461681
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "collision": null
+    },
+    {
+      "id": "698982de-6008-4ee9-b879-a263cf8a9f2e",
+      "name": "玄武岩_01",
+      "asset": "wasteland/library/岩石/玄武岩_01.glb",
+      "position": [
+        78.0750261407667,
+        -1.0120396796373825,
+        -26.81536212645387
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "collision": null
+    },
+    {
+      "id": "845b6009-1494-4c4a-9279-00b3f0462ec8",
+      "name": "砖块",
+      "asset": "wasteland/library/道具/砖块.glb",
+      "position": [
+        75.24639572353776,
+        0,
+        -24.131349069713167
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "collision": null
+    },
+    {
+      "id": "6d738ed8-b410-4652-9002-64dd59234acd",
+      "name": "樱花树",
+      "asset": "wasteland/library/树木/樱花树_视觉.glb",
+      "position": [
+        77.91288236552073,
+        -0.11277117321151253,
+        -25.940166924701213
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "collision": null
+    }
+  ]
+}
