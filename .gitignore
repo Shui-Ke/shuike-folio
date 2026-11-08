@@ -1,11 +1,11 @@
+# 依赖与构建产物
 node_modules/
 dist/
 editor-dist/
 
-# bruno-original：只保留源码与运行所需资源
-# 原始美术工程（.blend/.psd/.pur 等）与三首大体积音乐不上传，见 README
-bruno-original/resources/
-bruno-original/static/sounds/musics/
+# 本地归档（476MB，只在本地保留）
+bruno-archive-*/
+
 .DS_Store
 .vercel
 .VSCodeCounter
