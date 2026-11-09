@@ -24,12 +24,13 @@ export class View
         this.spherical = {
             phi: Math.PI * 0.31,
             theta: Math.PI * 0.25,
-            radius: { edges: { min: 8, max: 60 }, current: 21, nonIdealRatioOffset: 9 },
+            radius: { edges: { min: 8, max: 60 }, current: 30, nonIdealRatioOffset: 9 },
             offset: new THREE.Vector3()
         }
         // Explosions may request a kick, but the fixed camera never rolls.
         this.roll = { value: 0, kick: () => {} }
-        this.camera = new THREE.PerspectiveCamera(25, this.game.viewport.ratio, 0.1, 200)
+        this.camera = new THREE.PerspectiveCamera(25, this.game.viewport.ratio, 0.1, 600)
+        this.impactBlend = 0
         this.defaultCamera = this.camera.clone()
         this.game.scene.add(this.camera, this.defaultCamera)
         this.setOptimalArea()
@@ -143,6 +144,8 @@ export class View
             // Save state
             const savedPosition = this.defaultCamera.position.clone()
             const savedQuaternion = this.defaultCamera.quaternion.clone()
+            const savedFov = this.defaultCamera.fov
+            this.defaultCamera.fov = 25
 
             // Reset with max radius
             let radiusMax = (this.spherical.radius.edges.max + this.ratioOverflow * this.spherical.radius.nonIdealRatioOffset)
@@ -203,6 +206,8 @@ export class View
             // Put back state
             this.defaultCamera.position.copy(savedPosition)
             this.defaultCamera.quaternion.copy(savedQuaternion)
+            this.defaultCamera.fov = savedFov
+            this.defaultCamera.updateProjectionMatrix()
 
             // Save
             this.optimalArea.needsUpdate = false
@@ -212,7 +217,8 @@ export class View
 
     setZoom()
     {
-        this.zoom = { baseRatio: 0.75, ratio: 0.75, smoothedRatio: 0.75, sensitivity: 0.05 }
+        const initialRatio = (60 - 30) / (60 - 8)
+        this.zoom = { baseRatio: initialRatio, ratio: initialRatio, smoothedRatio: initialRatio, sensitivity: 0.05 }
         this.game.inputs.addActions([
             { name: 'zoom', categories: ['wandering', 'racing'], keys: ['Wheel.roll'] }
         ])
@@ -338,10 +344,13 @@ export class View
 
     update()
     {
-        // Follow the vehicle at a fixed heading and elevation angle. Pointer,
-        // speed, collisions, scenery and gamepad inputs never change the framing.
+        // Normal driving keeps the user's fixed camera. A heavy-impact launch
+        // temporarily frames both cars, then returns to the same wheel zoom.
         this.focusPoint.isTracking = true
         this.focusPoint.position.copy(this.focusPoint.trackedPosition)
+        const impact = this.game.world?.combat?.framing
+        this.impactBlend = impact?.blend ?? 0
+        if(this.impactBlend > 0) this.focusPoint.position.lerp(impact.focus, this.impactBlend)
         const easing = remap(this.focusPoint.easing, 0, 1, 1, this.game.ticker.delta * 10)
         this.focusPoint.smoothedPosition.lerp(this.focusPoint.position, easing)
         if(this.focusPoint.helper.visible) this.focusPoint.helper.position.copy(this.focusPoint.smoothedPosition)
@@ -349,6 +358,15 @@ export class View
         this.zoom.ratio = this.zoom.baseRatio
         this.zoom.smoothedRatio = lerp(this.zoom.smoothedRatio, this.zoom.ratio, Math.min(1, this.game.ticker.delta * 10))
         this.spherical.radius.current = lerp(this.spherical.radius.edges.min, this.spherical.radius.edges.max, 1 - this.zoom.smoothedRatio)
+        if(this.impactBlend > 0)
+            this.spherical.radius.current = lerp(this.spherical.radius.current, Math.max(this.spherical.radius.current, Math.min(110, 45 + impact.distance * 0.9)), this.impactBlend)
+        const fov = lerp(25, 42, this.impactBlend)
+        if(Math.abs(this.camera.fov - fov) > 0.0001)
+        {
+            this.camera.fov = this.defaultCamera.fov = fov
+            this.camera.updateProjectionMatrix()
+            this.defaultCamera.updateProjectionMatrix()
+        }
         this.spherical.offset.setFromSphericalCoords(this.spherical.radius.current, this.spherical.phi, this.spherical.theta)
         this.position.copy(this.focusPoint.smoothedPosition).add(this.spherical.offset)
         this.delta.copy(this.position).sub(this.defaultCamera.position)

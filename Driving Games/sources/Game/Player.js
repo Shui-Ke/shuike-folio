@@ -9,6 +9,7 @@ export class Player
 {
     static STATE_DEFAULT = 1
     static STATE_LOCKED = 2
+    static STATE_DESTROYED = 3
 
     constructor()
     {
@@ -219,13 +220,14 @@ export class Player
     {
         this.game.inputs.addActions([
             { name: 'forward',               categories: [ 'wandering', 'racing', 'cinematic' ], keys: [ 'Keyboard.ArrowUp', 'Keyboard.KeyW', 'Gamepad.up', 'Gamepad.r2' ] },
-            { name: 'right',                 categories: [ 'wandering', 'racing', 'cinematic' ], keys: [ 'Keyboard.ArrowRight', 'Keyboard.KeyD', 'Gamepad.right' ] },
+            { name: 'right',                 categories: [ 'wandering', 'racing', 'cinematic' ], keys: [ 'Keyboard.KeyD', 'Gamepad.right' ] },
             { name: 'backward',              categories: [ 'wandering', 'racing', 'cinematic' ], keys: [ 'Keyboard.ArrowDown', 'Keyboard.KeyS', 'Gamepad.down', 'Gamepad.l2' ] },
-            { name: 'left',                  categories: [ 'wandering', 'racing', 'cinematic' ], keys: [ 'Keyboard.ArrowLeft', 'Keyboard.KeyA', 'Gamepad.left' ] },
+            { name: 'left',                  categories: [ 'wandering', 'racing', 'cinematic' ], keys: [ 'Keyboard.KeyA', 'Gamepad.left' ] },
             { name: 'boost',                 categories: [ 'wandering', 'racing'              ], keys: [ 'Keyboard.ShiftLeft', 'Keyboard.ShiftRight', 'Gamepad.circle' ] },
             { name: 'brake',                 categories: [ 'wandering', 'racing'              ], keys: [ 'Keyboard.KeyB', 'Keyboard.ControlLeft', 'Gamepad.square' ] },
             { name: 'respawn',               categories: [ 'wandering',                       ], keys: [ 'Keyboard.KeyR', 'Gamepad.select' ] },
-            { name: 'suspensions',           categories: [ 'wandering', 'racing'              ], keys: [ 'Keyboard.Numpad5', 'Keyboard.Space', 'Gamepad.triangle' ] },
+            { name: 'jump',                  categories: [ 'wandering', 'racing'              ], keys: [ 'Keyboard.Space', 'Gamepad.triangle' ] },
+            { name: 'suspensions',           categories: [ 'wandering', 'racing'              ], keys: [ 'Keyboard.Numpad5' ] },
             { name: 'suspensionsFront',      categories: [ 'wandering', 'racing'              ], keys: [ 'Keyboard.Numpad8' ] },
             { name: 'suspensionsBack',       categories: [ 'wandering', 'racing'              ], keys: [ 'Keyboard.Numpad2' ] },
             { name: 'suspensionsRight',      categories: [ 'wandering', 'racing'              ], keys: [ 'Keyboard.Numpad6', 'Gamepad.r1' ] },
@@ -234,14 +236,14 @@ export class Player
             { name: 'suspensionsFrontRight', categories: [ 'wandering', 'racing'              ], keys: [ 'Keyboard.Numpad9', 'Keyboard.Digit3' ] },
             { name: 'suspensionsBackRight',  categories: [ 'wandering', 'racing'              ], keys: [ 'Keyboard.Numpad3', 'Keyboard.Digit4' ] },
             { name: 'suspensionsBackLeft',   categories: [ 'wandering', 'racing'              ], keys: [ 'Keyboard.Numpad1', 'Keyboard.Digit1' ] },
-            { name: 'interact',              categories: [ 'wandering', 'racing', 'cinematic' ], keys: [ 'Keyboard.Enter', 'Keyboard.KeyE', 'Keyboard.KeyF', 'Gamepad.cross' ] },
+            { name: 'interact',              categories: [ 'wandering', 'racing', 'cinematic' ], keys: [ 'Keyboard.Enter', 'Keyboard.KeyF', 'Gamepad.cross' ] },
             { name: 'honk',                  categories: [ 'wandering', 'racing', 'cinematic' ], keys: [ 'Keyboard.KeyH', 'Gamepad.l3' ] },
         ])
 
         // Respawn
         this.game.inputs.events.on('respawn', (action) =>
         {
-            if(this.state !== Player.STATE_DEFAULT)
+            if(this.state !== Player.STATE_DEFAULT && this.state !== Player.STATE_DESTROYED)
                 return
 
             if(action.active)
@@ -300,30 +302,18 @@ export class Player
         this.game.inputs.events.on('suspensionsBackRight', suspensionsUpdate)
         this.game.inputs.events.on('suspensionsBackLeft', suspensionsUpdate)
 
-        this.game.inputs.events.on('suspensions', () =>
+        const jump = () =>
         {
-            if(this.game.inputs.mode === Inputs.MODE_TOUCH)
-                this.game.inputs.nipple.jump()
-        })
-
-        // Nipple tap jump
-        let nippleJumpTimeout = null
-        this.game.inputs.nipple.events.on('tap', () =>
-        {
-            this.game.inputs.nipple.jump()
-
-            for(let i = 0; i < 4; i++)
-                this.suspensions[i] = 'high'
-
-            if(nippleJumpTimeout)
-                clearTimeout(nippleJumpTimeout)
-            
-            nippleJumpTimeout = setTimeout(() =>
+            if(this.state === Player.STATE_DEFAULT && this.game.physicalVehicle.requestJump())
             {
-                for(let i = 0; i < 4; i++)
-                    this.suspensions[i] = 'low'
-            }, 200)
+                this.sounds.suspensions.play(4)
+            }
+        }
+        this.game.inputs.events.on('jump', action =>
+        {
+            if(action.active) jump()
         })
+        this.game.inputs.nipple.events.on('tap', jump)
     }
 
     setDistanceDriven()
@@ -468,19 +458,26 @@ export class Player
 
     respawn(respawnName = null, callback = null)
     {
+        if(this.respawning) return
+        this.respawning = true
+        this.state = Player.STATE_LOCKED
         this.game.overlay.show(() =>
         {
             if(typeof callback === 'function')
                 callback()
 
             // Find respawn
-            let respawn = respawnName ? this.game.respawns.getByName(respawnName) : this.game.respawns.getClosest(this.position)
+            const respawn = respawnName ? this.game.respawns.getByName(respawnName) :
+                this.game.physicalVehicle.destroyed ? this.game.respawns.getDefault() : this.game.respawns.getClosest(this.position)
 
             // Update physical vehicle
             this.game.physicalVehicle.moveTo(
                 respawn.position,
                 respawn.rotation
             )
+            this.game.world.vehicleDamage.revive(this.game.physicalVehicle)
+            this.position.copy(respawn.position)
+            this.respawning = false
             
             this.state = Player.STATE_DEFAULT
             this.game.overlay.hide()
@@ -489,15 +486,7 @@ export class Player
 
     die()
     {
-        this.state = Player.STATE_LOCKED
-        
-        gsap.delayedCall(2, () =>
-        {
-            this.respawn(null, () =>
-            {
-                this.state = Player.STATE_DEFAULT
-            })
-        })
+        this.game.world.vehicleDamage.destroy(this.game.physicalVehicle)
     }
 
     honk()
@@ -526,7 +515,7 @@ export class Player
         this.boosting = 0
         this.braking = 0
 
-        if(this.state !== Player.STATE_DEFAULT)
+        if(this.state !== Player.STATE_DEFAULT || this.game.physicalVehicle.destroyed)
             return
 
         /**

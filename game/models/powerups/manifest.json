@@ -1,0 +1,93 @@
+[
+  {
+    "name": "caltrop",
+    "file": "caltrop.glb",
+    "bytes": 30768,
+    "triangles": 220,
+    "dimensions": [
+      1.578,
+      1.354,
+      1.404
+    ],
+    "pivot": "ground-center",
+    "up": "Y"
+  },
+  {
+    "name": "missile",
+    "file": "missile.glb",
+    "bytes": 42952,
+    "triangles": 364,
+    "dimensions": [
+      2.402,
+      0.732,
+      0.732
+    ],
+    "pivot": "ground-center",
+    "up": "Y"
+  },
+  {
+    "name": "jetpack",
+    "file": "jetpack.glb",
+    "bytes": 120156,
+    "triangles": 1288,
+    "dimensions": [
+      1.28,
+      1.517,
+      1.062
+    ],
+    "pivot": "ground-center",
+    "up": "Y"
+  },
+  {
+    "name": "shield",
+    "file": "shield.glb",
+    "bytes": 28096,
+    "triangles": 302,
+    "dimensions": [
+      1.29,
+      1.68,
+      0.662
+    ],
+    "pivot": "ground-center",
+    "up": "Y"
+  },
+  {
+    "name": "power-plus",
+    "file": "power-plus.glb",
+    "bytes": 138648,
+    "triangles": 1256,
+    "dimensions": [
+      3.294,
+      0.678,
+      0.186
+    ],
+    "pivot": "ground-center",
+    "up": "Y"
+  },
+  {
+    "name": "jump-times-two",
+    "file": "jump-times-two.glb",
+    "bytes": 130816,
+    "triangles": 1176,
+    "dimensions": [
+      3.18,
+      0.678,
+      0.186
+    ],
+    "pivot": "ground-center",
+    "up": "Y"
+  },
+  {
+    "name": "speed-plus",
+    "file": "speed-plus.glb",
+    "bytes": 140968,
+    "triangles": 1280,
+    "dimensions": [
+      3.042,
+      0.678,
+      0.186
+    ],
+    "pivot": "ground-center",
+    "up": "Y"
+  }
+]

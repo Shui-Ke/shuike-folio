@@ -249,7 +249,12 @@ export class Physics
             const waterDepth = this.game.water.depthAt(position)
             // physical.body.setGravityScale(1 + waterDepth * physical.waterGravityMultiplier)
 
-            if(waterDepth > 0)
+            if(physical.body.userData?.vehicle?.launch?.active && waterDepth === 0)
+            {
+                physical.body.setLinearDamping(0)
+                physical.body.setAngularDamping(0.1)
+            }
+            else if(waterDepth > 0)
             {
                 physical.body.setLinearDamping(1)
                 physical.body.setAngularDamping(1)
@@ -262,7 +267,11 @@ export class Physics
         }
         
         // this.world.step()
+        this.game.world?.combat?.beforeStep()
+        this.game.world?.items?.beforeStep()
         this.world.step(this.eventQueue)
+        this.game.world?.items?.afterStep()
+        this.game.world?.combat?.afterStep()
 
         // // Works but not handy
         // this.eventQueue.drainCollisionEvents((handle1, handle2, started) =>
@@ -286,6 +295,8 @@ export class Physics
             // Retrieve colliders
             const collider1 = this.world.getCollider(event.collider1())
             const collider2 = this.world.getCollider(event.collider2())
+            // A shield can be consumed and removed after this physics step.
+            if(!collider1 || !collider2) return
 
             // Retrieve bodies
             const body1 = collider1.parent()

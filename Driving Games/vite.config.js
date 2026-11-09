@@ -1,4 +1,5 @@
 import 'dotenv/config'
+import { fileURLToPath } from 'node:url'
 import restart from 'vite-plugin-restart'
 import wasm from 'vite-plugin-wasm'
 import basicSsl from '@vitejs/plugin-basic-ssl'
@@ -19,7 +20,13 @@ export default {
     {
         outDir: '../dist', // Output in the dist/ folder
         emptyOutDir: true, // Empty the folder first
-        sourcemap: false // Add sourcemap
+        sourcemap: false, // Add sourcemap
+        rollupOptions: {
+            input: {
+                game: fileURLToPath(new URL('./sources/index.html', import.meta.url)),
+                props: fileURLToPath(new URL('./sources/props.html', import.meta.url)),
+            }
+        }
     },
     plugins:
     [

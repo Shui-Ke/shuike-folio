@@ -22,7 +22,7 @@ export class Floor
 
         this.setVisual()
         this.setPhysical()
-        this.setBedRock()
+        this.setOceanFloor()
 
         this.game.ticker.events.on('tick', () =>
         {
@@ -34,8 +34,9 @@ export class Floor
     {
         this.size = Math.round(this.game.view.optimalArea.radius * 2) + 1
         this.halfSize = this.size * 0.5
-        this.cellSize = 1.5
-        this.subdivisions = this.size / this.cellSize
+        // Keep the displaced shoreline close to the continuous water mask.
+        this.cellSize = 0.5
+        this.subdivisions = Math.ceil(this.size / this.cellSize)
 
         // Geometry
         let geometry = new THREE.PlaneGeometry(this.size, this.size, this.subdivisions, this.subdivisions)
@@ -81,13 +82,15 @@ export class Floor
             const uvDim = min(min(uv().x, uv().y).mul(20), 1)
 
             const newPosition = positionLocal
-            newPosition.y.addAssign(terrainData.b.mul(-1.5).mul(uvDim))
+            const floorHeight = this.game.water.oceanHeightNode(positionWorld.xz, terrainData.b.mul(-1.5))
+            newPosition.y.addAssign(floorHeight.mul(uvDim))
 
             return newPosition
         })()
 
         // Mesh
         this.mesh = new THREE.Mesh(geometry, material)
+        this.drivingGeometry = geometry
         this.mesh.receiveShadow = true
         // this.mesh.castShadow = true
         this.game.scene.add(this.mesh)
@@ -97,7 +100,7 @@ export class Floor
         {
             this.size = Math.round(this.game.view.optimalArea.radius * 2) + 1
             this.halfSize = this.size * 0.5
-            this.subdivisions = this.size
+            this.subdivisions = Math.ceil(this.size / this.cellSize)
             
             geometry.dispose()
             
@@ -106,6 +109,7 @@ export class Floor
             geometry.deleteAttribute('normal')
 
             this.mesh.geometry = geometry
+            this.drivingGeometry = geometry
         }, 2)
 
         if(this.game.debug.active)
@@ -135,9 +139,10 @@ export class Floor
             const indexZ = Math.round(((z / (halfExtent * 2)) + 0.5) * (rowsCount - 1))
             const index = indexZ + indexX * rowsCount
 
-            heights[index] = y
+            heights[index] = this.game.water.oceanHeightAt(x, z, y)
         }
 
+        this.heightfield = { heights, rowsCount, size: this.game.terrain.size }
         const object = this.game.objects.add(
             null,
             {
@@ -152,59 +157,32 @@ export class Floor
         this.physical = object.physical
     }
 
-    setBedRock()
+    setOceanFloor()
     {
-        this.bedRock = {}
-        this.bedRock.halfHeight = 0.5
-        this.bedRock.halfWidth = 6
-        this.bedRock.enabled = false
-
-
-        this.bedRock.physical = this.game.physics.getPhysical({
-            type: 'kinematicPositionBased',
-            position: new THREE.Vector3(0, this.game.water.depthElevation - this.bedRock.halfHeight, 0),
-            frictionRule: 'min',
+        // A real, deep seabed replaces the shallow platform that followed the car.
+        this.oceanFloor = this.game.physics.getPhysical({
+            type: 'fixed',
+            position: new THREE.Vector3(0, this.game.water.ocean.floor - 0.5, 0),
             friction: 0.5,
-            enabled: true,
             colliders:
             [
-                { shape: 'cuboid', parameters: [ this.bedRock.halfWidth, this.bedRock.halfHeight, this.bedRock.halfWidth ] },
+                { shape: 'cuboid', parameters: [ 1000, 0.5, 1000 ], category: 'floor' },
             ]
         })
     }
 
     update()
     {
+        const cinematic = this.game.view.impactBlend > 0.001
+        if(cinematic && !this.cinematicGeometry)
+        {
+            this.cinematicGeometry = new THREE.PlaneGeometry(512, 512, 342, 342)
+            this.cinematicGeometry.rotateX(-Math.PI * 0.5)
+            this.cinematicGeometry.deleteAttribute('normal')
+        }
+        this.mesh.geometry = cinematic ? this.cinematicGeometry : this.drivingGeometry
         this.mesh.position.x = Math.round(this.game.view.optimalArea.position.x / this.cellSize) * this.cellSize
         this.mesh.position.z = Math.round(this.game.view.optimalArea.position.z / this.cellSize) * this.cellSize
 
-        // Bedrock
-        if(
-            Math.abs(this.game.player.position.x) > this.game.terrain.size / 2 - this.bedRock.halfWidth ||
-            Math.abs(this.game.player.position.z) > this.game.terrain.size / 2 - this.bedRock.halfWidth
-        )
-        {
-            if(!this.bedRock.enabled)
-            {
-                this.bedRock.enabled = true
-                this.bedRock.physical.body.setEnabled(true)
-            }
-            const x = Math.round(this.game.player.position.x)
-            const z = Math.round(this.game.player.position.z)
-            this.bedRock.physical.body.setNextKinematicTranslation({
-                x,
-                y: this.game.water.depthElevation - this.bedRock.halfHeight,
-                z
-            })
-            this.bedRock.physical.body.setLinvel({ x: 0, y: 0, z: 0 })
-        }
-        else
-        {
-            if(this.bedRock.enabled)
-            {
-                this.bedRock.enabled = false
-                this.bedRock.physical.body.setEnabled(false)
-            }
-        }
     }
 }

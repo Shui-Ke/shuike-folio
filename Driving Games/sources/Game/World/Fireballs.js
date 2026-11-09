@@ -30,7 +30,7 @@ export class Fireballs
 
     }
 
-    create(coordinates, fireRadius = 5, explosionRadius = 5)
+    create(coordinates, fireRadius = 5, explosionRadius = 5, options = {})
     {
         // Material
         const material = new THREE.MeshBasicNodeMaterial({ wireframe: false })
@@ -56,7 +56,8 @@ export class Fireballs
                 noiseZ.mul(blending.z),
             ).remap(0.15, 0.9, 0, 1).toVar()
             
-            noise.mulAssign(positionWorld.y.mul(2).clamp(0, 1)) // Apply floor attenuation
+            if(options.groundAttenuation !== false)
+                noise.mulAssign(positionWorld.y.mul(2).clamp(0, 1)) // Apply floor attenuation
             
             noise.subAssign(progress) // Apply progress
 
@@ -83,6 +84,7 @@ export class Fireballs
 
         // Mesh
         const mesh = new THREE.Mesh(this.geometry, material)
+        mesh.name = 'explosion-fireball'
         mesh.position.copy(coordinates)
         mesh.rotation.reorder('XYZ')
         mesh.rotation.x = Math.random() * Math.PI * 2
@@ -96,7 +98,8 @@ export class Fireballs
         gsap.fromTo(progress, { value: 0.15 }, { value: 1, duration: 2, delay: 0.25, ease: 'linear' })
 
         // Trigger explosion
-        this.game.explosions.explode(coordinates, explosionRadius, 8)
+        if((options.strength ?? 8) > 0)
+            this.game.explosions.explode(coordinates, explosionRadius, options.strength ?? 8)
 
         // Dispose
         gsap.delayedCall(2.25, () =>

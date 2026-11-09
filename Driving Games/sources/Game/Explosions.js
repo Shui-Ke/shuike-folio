@@ -14,6 +14,7 @@ export class Explosions
 
     explode(coordinates, radius = 7, strength = 4, vehicleOnly = false, bulletTimeStrengthThreshold = 3)
     {
+        const hitKey = `explosion:${this.explosionSerial = (this.explosionSerial ?? 0) + 1}`
         // View roll
         const distance = this.game.view.focusPoint.position.distanceTo(coordinates)
         const rollKickStrength = remapClamp(distance, 2, 15, 1, 0)
@@ -44,6 +45,8 @@ export class Explosions
 
             if(fadedStrength > 0)
             {
+                const vehicle = physicalObject.body.userData?.vehicle
+                if(vehicle && this.game.world.items?.absorb(vehicle, hitKey)) return false
                 // const point = direction.negate().setLength(0).add(position)
                 const point = position
                 this.game.ticker.wait(1, () =>

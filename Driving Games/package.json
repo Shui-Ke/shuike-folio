@@ -7,7 +7,11 @@
     "dev": "vite --mode development",
     "build": "vite build --mode production",
     "preview": "vite preview",
-    "test:core": "node tests/core-runtime.cjs"
+    "test:core": "node tests/core-runtime.cjs",
+    "test:water-damage": "node tests/water-damage-runtime.cjs",
+    "test:gameplay": "node tests/gameplay-runtime.cjs",
+    "test:items": "node tests/items-runtime.cjs",
+    "build:props": "node tools/build-props.mjs"
   },
   "author": "",
   "license": "ISC",

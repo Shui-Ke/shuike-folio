@@ -1,5 +1,6 @@
 import { uniform, Fn } from 'three/tsl'
 import { Game } from './Game.js'
+import { MathUtils } from 'three/webgpu'
 
 export class Water
 {
@@ -9,6 +10,15 @@ export class Water
 
         this.surfaceElevation = -0.3
         this.depthElevation = -1.5
+        this.ocean = { start: 72, end: 88, floor: -12, halfSize: 96, warningDepth: 1.25 }
+        this.oceanHeightNode = Fn(([position, originalHeight]) =>
+        {
+            const edge = position.x.abs().max(position.y.abs())
+            const offshore = edge.smoothstep(this.ocean.start, this.ocean.end)
+            const submerged = originalHeight.negate().smoothstep(0.3, 0.8)
+            const height = originalHeight.sub(offshore.mul(submerged).mul(10.5))
+            return edge.greaterThan(this.ocean.halfSize).select(this.ocean.floor, height)
+        })
 
         this.surfaceElevationUniform = uniform(this.surfaceElevation)
         this.surfaceThicknessUniform = uniform(0.013)
@@ -31,6 +41,15 @@ export class Water
 
     depthAt(position)
     {
-        return Math.max(-position.y, this.surfaceElevation)
+        return Math.max(0, this.surfaceElevationUniform.value - position.y)
+    }
+
+    oceanHeightAt(x, z, originalHeight)
+    {
+        const edge = Math.max(Math.abs(x), Math.abs(z))
+        if(edge > this.ocean.halfSize) return this.ocean.floor
+        const offshore = MathUtils.smoothstep(edge, this.ocean.start, this.ocean.end)
+        const submerged = MathUtils.smoothstep(-originalHeight, 0.3, 0.8)
+        return originalHeight - offshore * submerged * 10.5
     }
 }

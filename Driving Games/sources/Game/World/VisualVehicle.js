@@ -337,9 +337,19 @@ export class VisualVehicle
         this.screenPosition = new THREE.Vector2(0, 0)
     }
 
+    setDestroyed(destroyed)
+    {
+        this.parts.chassis.visible = !destroyed
+        if(this.antenna) this.antenna.head.visible = !destroyed
+        this.boostTrails.left.alpha = this.boostTrails.right.alpha = 0
+        this.mainGroundTrack.update(this.physicalVehicle.position, false)
+        for(const wheel of this.wheels.items) wheel.groundTrack.update(this.physicalVehicle.position, false)
+    }
+
     update()
     {
         const physicalVehicle = this.physicalVehicle
+        if(physicalVehicle.destroyed) return
         
         // Chassis
         this.parts.chassis.position.copy(physicalVehicle.position)

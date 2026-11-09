@@ -24,6 +24,11 @@ import { Benches } from './Benches.js'
 import { Scenery } from './Scenery.js'
 import { CanyonCamp } from './CanyonCamp.js'
 import { RivalVehicles } from './RivalVehicles.js'
+import { VehicleDamage } from '../VehicleDamage.js'
+import { OceanBoundary } from './OceanBoundary.js'
+import { VehicleCombat } from '../VehicleCombat.js'
+import { Powerups } from './Powerups.js'
+import { VehicleItems } from '../VehicleItems.js'
 
 
 export class World
@@ -53,6 +58,7 @@ export class World
 
             this.floor = new Floor()
             this.waterSurface = new WaterSurface()
+            this.oceanBoundary = new OceanBoundary(this.floor.heightfield)
             this.grass = new Grass()
             this.windLines = new WindLines()
             this.confetti = new Confetti()
@@ -78,6 +84,11 @@ export class World
             this.scenery = new Scenery()
             this.camp = new CanyonCamp()
             this.areas = {}
+            this.vehicleDamage = new VehicleDamage()
+            this.vehicleDamage.register(this.game.physicalVehicle, this.visualVehicle, true)
+            this.combat = new VehicleCombat()
+            this.items = new VehicleItems()
+            this.powerups = new Powerups()
         }
     }
 }

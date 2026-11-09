@@ -15,6 +15,8 @@ export class Time
         gsap.globalTimeline.timeScale(this.scale)
 
         this.setBulletTime()
+        this.impactRemaining = 0
+        this.impactDuration = 0.34
 
         this.game.ticker.events.on('tick', () =>
         {
@@ -58,6 +60,12 @@ export class Time
         }
     }
 
+    impact(duration = 0.34)
+    {
+        this.impactDuration = duration
+        this.impactRemaining = duration
+    }
+
     update()
     {
         if(Date.now() > this.bulletTime.endTime)
@@ -67,7 +75,9 @@ export class Time
         this.bulletTime.progress += (this.bulletTime.active ? 1 : - 1) * this.game.ticker.delta * speed
         this.bulletTime.progress = clamp(this.bulletTime.progress, 0, 1)
 
-        this.scale = remap(this.bulletTime.progress, 0, 1, this.defaultScale, this.bulletTime.scale)
+        this.impactRemaining = Math.max(0, this.impactRemaining - this.game.ticker.delta)
+        const impactRatio = this.impactRemaining > 0.14 ? 0.22 : 1 - 0.78 * this.impactRemaining / 0.14
+        this.scale = remap(this.bulletTime.progress, 0, 1, this.defaultScale, this.bulletTime.scale) * impactRatio
         // console.log(this.bulletTime.progress)
     }
 

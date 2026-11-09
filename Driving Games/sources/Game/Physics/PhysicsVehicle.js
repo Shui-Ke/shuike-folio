@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu'
 import { Game } from '../Game.js'
 import { Events } from '../Events.js'
 import { lerp, remap, remapClamp, smallestAngle } from '../utilities/maths.js'
+import { VehicleUpgrades } from '../VehicleUpgrades.js'
 
 export class PhysicsVehicle
 {
@@ -9,6 +10,9 @@ export class PhysicsVehicle
     {
         this.game = Game.getInstance()
         this.controlSource = options.controls
+        this.destroyed = false
+        this.upgrades = new VehicleUpgrades()
+        this.jumpState = { used: 0, airborne: false, lastRequest: -Infinity, takeoffSpeed: 0, airOffset: new THREE.Vector3() }
 
         this.events = new Events()
 
@@ -17,6 +21,9 @@ export class PhysicsVehicle
         this.boostMultiplier = 2
         this.topSpeed = 5
         this.topSpeedBoost = 40
+        // Measured on the original suspension/drive setup; topSpeed above is
+        // the motor's soft-force threshold, not the actual cruising velocity.
+        this.drivingSpeedRange = { normal: 11, boost: 22 }
         this.brakeAmplitude = 35
         this.idleBrake = 0.06
         this.reverseBrake = 0.4
@@ -128,6 +135,7 @@ export class PhysicsVehicle
             }
         })
         this.chassis.physical = object.physical
+        this.chassis.physical.body.enableCcd(true)
         this.chassis.mass = this.chassis.physical.body.mass()
     }
 
@@ -475,15 +483,75 @@ export class PhysicsVehicle
         this.chassis.physical.body.setAngvel({ x: 0, y: 0, z: 0 })
 
         this.position.copy(position)
+        this.quaternion.copy(quaternion)
+        this.velocity.set(0, 0, 0)
+        this.speed = this.xzSpeed = this.forwardSpeed = 0
+        this.forward.set(1, 0, 0).applyQuaternion(quaternion)
+        this.upward.set(0, 1, 0).applyQuaternion(quaternion)
+        this.jumpState.used = 0
+        this.jumpState.airborne = false
+        this.jumpState.lastRequest = -Infinity
+        this.jumpState.airOffset.set(0, 0, 0)
+        this.wheels.inContactCount = 0
+        if(this.launch) this.launch.active = false
+    }
+
+    requestJump()
+    {
+        const body = this.chassis.physical.body
+        const state = this.jumpState
+        if(this.destroyed || this.launch?.active || !body.isEnabled() || this.game.editorPaused || this.game.escMenu?.isOpen) return false
+        if(this.game.water.depthAt(body.translation()) > 0.15) return false
+        if(this.game.ticker.elapsed - state.lastRequest < 0.18) return false
+        const grounded = this.wheels.inContactCount >= 2 && !state.airborne
+        const jet = this.game.world.items?.state(this).jet
+        if(jet) {
+            if(!this.game.world.items.jetJump(this)) return false
+        }
+        else if(!grounded && (this.upgrades.maxJumps < 2 || Math.max(1, state.used) >= this.upgrades.maxJumps)) return false
+        if(grounded && this.upsideDown.active) { this.flip.jump(); return true }
+        const velocity = body.linvel()
+        state.used = grounded ? 1 : Math.max(1, state.used) + 1
+        state.lastRequest = this.game.ticker.elapsed
+        if(grounded)
+        {
+            state.takeoffSpeed = Math.hypot(velocity.x, velocity.z)
+            state.airOffset.set(0, 0, 0)
+        }
+        // The second press cancels falling first, so the extra jump is readable.
+        body.setLinvel({ x: velocity.x, y: Math.max(0, velocity.y) + 5.5, z: velocity.z }, true)
+        return true
+    }
+
+    updateAirControl()
+    {
+        const state = this.jumpState
+        if(!state.airborne || this.wheels.inContactCount > 0 || this.game.water.depthAt(this.position) > 0.15) return
+        const limit = Math.max(state.takeoffSpeed, this.topSpeed * this.upgrades.speedMultiplier) * 0.25
+        const direction = this.forward.clone().setY(0).normalize().multiplyScalar(this.controls.accelerating)
+            .add(this.sideward.clone().setY(0).normalize().multiplyScalar(-this.controls.steering))
+        if(direction.lengthSq() > 1) direction.normalize()
+        const previous = state.airOffset.clone()
+        state.airOffset.lerp(direction.multiplyScalar(limit), Math.min(1, this.game.ticker.deltaScaled * 8))
+        const change = state.airOffset.clone().sub(previous)
+        const body = this.chassis.physical.body, velocity = body.linvel()
+        body.setLinvel({ x: velocity.x + change.x, y: velocity.y, z: velocity.z + change.z }, true)
     }
 
     updatePrePhysics()
     {
-        if(this.controlSource && (this.game.editorPaused || !this.chassis.physical.body.isEnabled())) return
+        if(this.destroyed || this.game.editorPaused || !this.chassis.physical.body.isEnabled()) return
+        if(this.launch?.active)
+        {
+            for(let i = 0; i < 4; i++) { this.controller.setWheelEngineForce(i, 0); this.controller.setWheelBrake(i, 0) }
+            this.controller.updateVehicle(Math.min(1/60, this.game.ticker.deltaAverage))
+            return
+        }
         const controls = this.controls
         // Engine force
         const topSpeed = lerp(this.topSpeed, this.topSpeedBoost, controls.boosting)
-        const overflowSpeed = Math.max(0, this.speed - topSpeed)
+        const speedMultiplier = this.upgrades.speedMultiplier * (this.game.world.items?.speedFactor(this) ?? 1)
+        const overflowSpeed = Math.max(0, this.speed / speedMultiplier - topSpeed)
         let engineForce = (controls.accelerating * (1 + controls.boosting * this.boostMultiplier)) * this.engineForceAmplitude / (1 + overflowSpeed) * this.game.ticker.deltaScaled
 
         // Brake
@@ -534,12 +602,39 @@ export class PhysicsVehicle
 
         // Update controller
         const delta = this.game.quality.level === 1 ? 1/60 : Math.min(1/60, this.game.ticker.deltaAverage)
+        // Solve wheel traction in the original speed range, then restore the
+        // upgraded horizontal velocity before Rapier integrates collisions.
+        // Simply multiplying engine force also multiplied wheelie torque and
+        // made upgraded boost slower than the base car.
+        const body = this.chassis.physical.body
+        const beforeDrive = body.linvel()
+        if(speedMultiplier !== 1)
+        {
+            body.setLinvel({ x: beforeDrive.x / speedMultiplier, y: beforeDrive.y, z: beforeDrive.z / speedMultiplier }, true)
+        }
         this.controller.updateVehicle(delta)
+        if(speedMultiplier !== 1)
+        {
+            const velocity = body.linvel()
+            body.setLinvel({ x: velocity.x * speedMultiplier, y: velocity.y, z: velocity.z * speedMultiplier }, true)
+        }
+        if(engineForce !== 0)
+        {
+            const axis = this.forward.clone().setY(0).normalize().multiplyScalar(Math.sign(engineForce))
+            const velocity = new THREE.Vector3().copy(body.linvel())
+            const limit = lerp(this.drivingSpeedRange.normal, this.drivingSpeedRange.boost, controls.boosting) * speedMultiplier
+            // Limit only speed added by the motor. External collision impulses
+            // and downhill momentum remain free to exceed the driving limit.
+            const previousAlong = axis.dot(beforeDrive)
+            const excess = Math.max(0, velocity.dot(axis) - Math.max(limit, previousAlong))
+            if(excess > 0) body.setLinvel(velocity.addScaledVector(axis, -excess), true)
+        }
+        this.updateAirControl()
     }
 
     updatePostPhysics()
     {
-        if(this.controlSource && (this.game.editorPaused || !this.chassis.physical.body.isEnabled())) return
+        if(this.destroyed || this.game.editorPaused || !this.chassis.physical.body.isEnabled()) return
         // Various measures
         const newPosition = new THREE.Vector3().copy(this.chassis.physical.body.translation())
         this.velocity = newPosition.clone().sub(this.position)
@@ -595,6 +690,27 @@ export class PhysicsVehicle
 
         this.wheels.inContactCount = inContactCount
         this.wheels.justTouchedCount = justTouchedCount
+        if(this.launch?.active)
+        {
+            this.launch.elapsed += this.game.ticker.deltaScaled
+            if((this.launch.elapsed > 0.3 && inContactCount >= 2 && this.chassis.physical.body.linvel().y < 1) || this.launch.elapsed > this.launch.duration + 2)
+                this.launch.active = false
+        }
+
+        const jump = this.jumpState
+        if(inContactCount === 0 && !jump.airborne)
+        {
+            jump.airborne = true
+            jump.used = Math.max(1, jump.used)
+            jump.takeoffSpeed = Math.hypot(this.chassis.physical.body.linvel().x, this.chassis.physical.body.linvel().z)
+            jump.airOffset.set(0, 0, 0)
+        }
+        if(inContactCount >= 2 && jump.airborne && this.chassis.physical.body.linvel().y < 1.5 && this.game.ticker.elapsed - jump.lastRequest > 0.18)
+        {
+            jump.used = 0
+            jump.airborne = false
+            jump.airOffset.set(0, 0, 0)
+        }
 
         this.stop.test()
         this.upsideDown.test()

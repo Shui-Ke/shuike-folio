@@ -106,7 +106,9 @@ export class WaterSurface
                 .sub(terrainData.b.remap(0, 1, -0.3, 1).oneMinus())
                 .add(ripplesNoise)
 
-            ripples.assign(this.ripplesRatio.remap(0, 1, -1, -0.4).step(ripples))
+            const edge = this.ripplesRatio.remap(0, 1, -1, -0.4)
+            const feather = ripples.fwidth().max(0.015)
+            ripples.assign(ripples.smoothstep(edge.sub(feather), edge.add(feather)).oneMinus())
 
             return ripples
         })
@@ -223,11 +225,12 @@ export class WaterSurface
         /**
          * Shore
          */
-        const shoreEdge = uniform(0.17)
+        const shoreEdge = uniform(0.12)
         
-        const shoreNode = Fn(([terrainData]) =>
+        const shoreNode = Fn(([waterDepth]) =>
         {
-            return shoreEdge.step(terrainData.b)
+            const feather = waterDepth.fwidth().max(0.015)
+            return waterDepth.smoothstep(shoreEdge.sub(feather), shoreEdge.add(feather)).oneMinus()
         })
 
         // Debug
@@ -246,6 +249,11 @@ export class WaterSurface
                 // Terrain data
                 // const terrainUv = this.game.terrain.worldPositionToUvNode(positionWorld.xz)
                 const terrainData = this.game.terrain.terrainNode(positionWorld.xz)
+                const floorHeight = this.game.water.oceanHeightNode(positionWorld.xz, terrainData.b.mul(-1.5))
+                const waterDepth = this.game.water.surfaceElevationUniform.sub(floorHeight)
+                // Never paint foam on the dry side of the mathematical shoreline.
+                // Coarse floor triangles used to expose large white wedges there.
+                const waterCoverage = waterDepth.smoothstep(0, waterDepth.fwidth().max(0.02))
                 const value = float(0)
 
                 // Ripples
@@ -261,9 +269,9 @@ export class WaterSurface
                     value.assign(max(value, splashesNode()))
 
                 // Shore
-                value.assign(max(value, shoreNode(terrainData)))
+                value.assign(max(value, shoreNode(waterDepth)))
 
-                return value
+                return value.mul(waterCoverage)
             })()
         }
 
@@ -317,11 +325,9 @@ export class WaterSurface
             const surfaceAlpha = baseOutput.a
             const surfaceOutput = vec4(baseOutput.rgb, 1)
 
-            const finalOuput = select(
-                surfaceAlpha.lessThan(0.5),
-                blurOutput,
-                surfaceOutput
-            )
+            // Preserve partial coverage instead of turning the softened edge
+            // back into a hard binary cutout in the high-quality water pass.
+            const finalOuput = mix(blurOutput, surfaceOutput, surfaceAlpha)
 
             return finalOuput
         })()
@@ -426,6 +432,7 @@ export class WaterSurface
         this.mesh.position.x = this.game.view.optimalArea.position.x
         this.mesh.position.z = this.game.view.optimalArea.position.z
         this.mesh.renderOrder = 1
+        this.mesh.scale.setScalar(this.game.view.impactBlend > 0.001 ? 512 : this.game.view.optimalArea.radius * 2)
 
         // Material
         const hasRipples = this.ripplesRatio.value > 0.0001

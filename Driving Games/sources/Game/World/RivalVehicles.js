@@ -57,6 +57,7 @@ export class RivalVehicles
                 upsideTime: 0, lastFlip: -10, recoveries: 0, nextSpawn: 0,
             }
             this.items.push(bot)
+            this.game.world.vehicleDamage.register(vehicle, visual)
             this.setVisible(bot, false)
             this.respawn(bot)
         }
@@ -98,6 +99,7 @@ export class RivalVehicles
 
     respawn(bot)
     {
+        if(bot.vehicle.destroyed) return false
         const position = this.spawnPosition(bot)
         bot.nextSpawn = this.time + 2
         if(!position) return false
@@ -141,15 +143,27 @@ export class RivalVehicles
     {
         const { controls, vehicle } = bot
         controls.accelerating = controls.steering = controls.boosting = controls.braking = 0
+        if(vehicle.destroyed)
+        {
+            bot.state = 'destroyed'
+            return
+        }
+        if(vehicle.launch?.active) { bot.state = 'launched'; return }
         if(bot.state === 'waiting')
         {
             if(this.time >= bot.nextSpawn) this.respawn(bot)
             return
         }
         const position = vehicle.position
-        const playerDistance = position.distanceTo(this.game.physicalVehicle.position)
         const ground = this.navigation.groundAt(position.x, position.z)
-        if(ground === null || position.y < ground - 3 || this.game.water.depthAt(position) > 1 || playerDistance > 100)
+        // Let a car pushed offshore actually sink. Damage is decided from the
+        // roof/body height after physics, never by an automatic AI teleport.
+        if(ground === null || this.game.water.depthAt(position) > 0.15)
+        {
+            bot.state = 'sinking'
+            return
+        }
+        if(position.y < ground - 3)
         {
             if(this.time >= bot.nextSpawn && !this.respawn(bot))
             {
@@ -181,7 +195,9 @@ export class RivalVehicles
             return
         }
         if(!bot.target || this.time > bot.nextTarget || !bot.target.chassis.physical.body.isEnabled()) this.chooseTarget(bot)
-        const target = bot.target.position
+        const pickup = this.game.world.powerups?.nearestFor(vehicle)
+        if(bot.pickupId !== (pickup?.id ?? null)) { bot.pickupId = pickup?.id ?? null; bot.nextRoute = 0 }
+        const target = pickup?.position ?? bot.target.position
         const distance = Math.hypot(target.x - position.x, target.z - position.z)
         if(this.time >= bot.nextRoute)
         {
@@ -205,7 +221,7 @@ export class RivalVehicles
         const error = Math.atan2(Math.sin(desired - heading), Math.cos(desired - heading))
         controls.steering = THREE.MathUtils.clamp(-error * 1.8, -1, 1)
         controls.accelerating = Math.abs(error) > 1 ? 0.6 : 1
-        bot.state = 'chase'
+        bot.state = pickup ? 'scavenge' : 'chase'
 
         // Probe the car's swept width. Vehicles remain valid collision targets.
         const lookAhead = 4 + Math.min(vehicle.speed, 15) * 0.3
@@ -223,6 +239,7 @@ export class RivalVehicles
         const ahead = this.navigation.sample(position.x + Math.cos(heading) * lookAhead, position.z + Math.sin(heading) * lookAhead)
         if(blocked || !ahead)
         {
+            if(blocked && ahead && vehicle.upgrades.jump && this.time - (bot.lastJump ?? -10) > 4 && vehicle.requestJump()) bot.lastJump = this.time
             controls.accelerating = 0.35
             controls.steering = Math.abs(error) > 0.15 ? Math.sign(-error) : (bot.index % 2 ? 1 : -1)
             controls.braking = vehicle.speed > 5 ? 0.35 : 0
@@ -240,6 +257,7 @@ export class RivalVehicles
             bot.state = 'charge'
         }
         if(Math.abs(error) > 0.7 && vehicle.speed > 7) controls.braking = 0.25
+        if(vehicle.upgrades.jump && vehicle.jumpState.airborne && vehicle.jumpState.used === 1 && vehicle.chassis.physical.body.linvel().y < -0.5) vehicle.requestJump()
 
         bot.stuckTime = vehicle.speed < 0.65 ? bot.stuckTime + dt : Math.max(0, bot.stuckTime - dt * 0.5)
         if(bot.stuckTime > 1.8 || (distance < 3.2 && vehicle.speed < 2)) this.reverse(bot)
@@ -286,7 +304,7 @@ export class RivalVehicles
         {
             if(bot.suspended)
             {
-                if(bot.state !== 'waiting')
+                if(bot.state !== 'waiting' && !bot.vehicle.destroyed)
                 {
                     bot.vehicle.activate()
                     bot.vehicle.chassis.physical.body.setLinvel(bot.savedVelocity, true)

@@ -19,6 +19,7 @@ export class ExplosiveCrates
 
         // Update materials 
         this.game.materials.updateObject(base)
+        this.template = base.clone(true)
 
         // Create instanced group
         this.instancedGroup = new InstancedGroup(this.references, base)
