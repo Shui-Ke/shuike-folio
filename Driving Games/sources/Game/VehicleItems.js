@@ -4,6 +4,8 @@ import { Game } from './Game.js'
 import { ITEM_TYPES } from './ItemDefinitions.js'
 import { MissileSmoke } from './World/MissileSmoke.js'
 
+const SHIELD_COOLDOWN = 12
+
 export class VehicleItems
 {
     constructor()
@@ -26,7 +28,7 @@ export class VehicleItems
     {
         if(!this.states.has(vehicle)) this.states.set(vehicle, {
             counts: Object.fromEntries(ITEM_TYPES.map(item => [item.type, 3])),
-            slowUntil: 0, shield: null, jet: null, nextUse: 0, nextAI: this.clock + 6,
+            slowUntil: 0, shield: null, jet: null, nextUse: 0, nextAI: this.clock + 6, nextShield: 0,
             blockedContacts: new Set(), recentHits: new Map(),
         })
         return this.states.get(vehicle)
@@ -34,7 +36,7 @@ export class VehicleItems
 
     running()
     {
-        return this.game.reveal.step === 2 && this.game.player.state === 1 && !this.game.editorPaused && !this.game.escMenu?.isOpen
+        return this.game.reveal.step === 2 && this.game.player.state === 1 && !this.game.editorPaused && !this.game.escMenu?.isOpen && !this.game.match?.ended
     }
 
     alive(vehicle)
@@ -92,11 +94,13 @@ export class VehicleItems
             button.classList.toggle('selected', this.selected === index)
             button.setAttribute('aria-pressed', String(this.selected === index))
             button.querySelector('[data-count]').textContent = state.counts[type]
-            button.disabled = state.counts[type] === 0 || !this.running() || !this.alive(vehicle)
+            const cooldown = type === 'shield' && !state.shield && state.nextShield > this.clock
+            button.disabled = state.counts[type] === 0 || !this.running() || !this.alive(vehicle) || cooldown
         })
         const statuses = []
         if(state.slowUntil > this.clock) statuses.push(`减速 ${Math.ceil(state.slowUntil - this.clock)}s`)
         if(state.shield) statuses.push(`护盾 ${state.shield.charges}/3`)
+        else if(state.nextShield > this.clock) statuses.push(`护盾冷却 ${Math.ceil(state.nextShield - this.clock)}s`)
         if(state.jet) statuses.push(`喷气 · 可跳跃 ${state.jet.jumps} 次`)
         this.hud.querySelector('.item-status').textContent = this.clock < (this.messageUntil ?? 0) ? this.message : statuses.join(' · ')
     }
@@ -120,7 +124,49 @@ export class VehicleItems
 
     nearest(vehicle)
     {
+        // Extreme rivals lock their missiles onto the player — never a packmate.
+        const focus = this.game.world.rivals?.focusTargetOf?.(vehicle)
+        if(focus && focus !== vehicle)
+            return this.alive(focus) && vehicle.position.distanceTo(focus.position) <= 80 ? focus : null
+
         return this.vehicles().filter(other => other !== vehicle).sort((a, b) => a.position.distanceToSquared(vehicle.position) - b.position.distanceToSquared(vehicle.position))[0] ?? null
+    }
+
+    // Where the current arc is about to put the car: water counts as lethal.
+    deathZoneAhead(vehicle)
+    {
+        const position = vehicle.position
+        const velocity = vehicle.chassis.physical.body.linvel()
+        const x = position.x + velocity.x * 1.4
+        const z = position.z + velocity.z * 1.4
+        const ground = this.game.navigation?.groundAt(x, z) ?? null
+        if(ground === null)
+            return true
+
+        return this.game.water.depthAt({ x, y: ground, z }) > 0.15
+    }
+
+    // A rival flying toward the lake/ocean burns its jetpack to survive.
+    tryEmergencyJet(vehicle)
+    {
+        if(this.game.config?.profile?.botItems === false)
+            return false
+
+        const state = this.state(vehicle)
+        if(!state.counts.jetpack || state.jet)
+            return false
+        if(!vehicle.jumpState.airborne && !vehicle.launch?.active)
+            return false
+        if(this.clock < (state.nextSave ?? 0))
+            return false
+        if(!this.deathZoneAhead(vehicle))
+            return false
+        if(!this.use(vehicle, 'jetpack'))
+            return false
+
+        // Roughly the jet lifetime, so a second tank can chain if still doomed.
+        state.nextSave = this.clock + 1.3
+        return true
     }
 
     vehicleColor(vehicle)
@@ -134,6 +180,11 @@ export class VehicleItems
         const state = this.state(vehicle)
         if(!state.counts[type] || this.clock < state.nextUse) return false
         if(type === 'shield' && state.shield) { this.notify(vehicle, '护盾仍在生效'); return false }
+        if(type === 'shield' && this.clock < state.nextShield)
+        {
+            this.notify(vehicle, `护盾冷却 ${Math.ceil(state.nextShield - this.clock)}s`)
+            return false
+        }
         if(type === 'jetpack' && state.jet) return false
         let success = false
         if(type === 'caltrop' || type === 'crate') success = this.place(vehicle, type)
@@ -223,6 +274,7 @@ export class VehicleItems
         this.game.physics.world.removeCollider(shield.collider, true)
         shield.mesh.removeFromParent(); shield.mesh.geometry.dispose(); shield.mesh.material.dispose()
         state.shield = null
+        state.nextShield = this.clock + SHIELD_COOLDOWN
     }
 
     absorb(vehicle, key)
@@ -308,6 +360,7 @@ export class VehicleItems
         const key = `jet:${++this.serial}`
         for(const other of this.vehicles()) {
             if(other === vehicle) continue
+            if(this.game.world.rivals?.isFriendlyPair?.(vehicle, other)) continue
             const delta = other.position.clone().sub(vehicle.position), distance = delta.length()
             if(distance > 9 || this.absorb(other, key)) continue
             const direction = delta.setY(0)
@@ -334,9 +387,9 @@ export class VehicleItems
         this.game.scene.add(mesh); this.pulses.push({ mesh, radius, age: 0 })
     }
 
-    detonate(position)
+    detonate(position, owner = null)
     {
-        this.game.world.fireballs.create(position, 5, 7, { groundAttenuation: false, strength: 8, recoveryDelay: true })
+        this.game.world.fireballs.create(position, 5, 7, { groundAttenuation: false, strength: 8, recoveryDelay: true, owner })
         this.game.world.explosiveCrates.sounds.explosions[0].play(position)
     }
 
@@ -365,10 +418,11 @@ export class VehicleItems
             if(entity.age < entity.dropDuration + 0.15) return
             for(const vehicle of vehicles) {
                 if(vehicle === entity.owner && entity.age < 1.4) continue
+                if(this.game.world.rivals?.isFriendlyPair?.(entity.owner, vehicle)) continue
                 const previous = this.before.get(vehicle)?.position ?? vehicle.position
                 const closest = previous.distanceToSquared(vehicle.position) < 400 ? new THREE.Line3(previous, vehicle.position).closestPointToPoint(entity.position, true, new THREE.Vector3()) : vehicle.position
                 if(Math.hypot(closest.x - entity.position.x, closest.z - entity.position.z) > 1.85 * vehicle.scale || Math.abs(closest.y - entity.position.y) > 1.6 * vehicle.scale) continue
-                if(entity.type === 'crate') this.detonate(entity.position)
+                if(entity.type === 'crate') this.detonate(entity.position, entity.owner)
                 else if(!this.absorb(vehicle, `caltrop:${entity.id}`)) {
                     const body = vehicle.chassis.physical.body
                     body.setLinvel({ x: 0, y: 0, z: 0 }, true)
@@ -424,6 +478,7 @@ export class VehicleItems
         if(rayHit) hitDistance = rayHit.timeOfImpact
         for(const vehicle of vehicles) {
             if(vehicle === entity.owner) continue
+            if(this.game.world.rivals?.isFriendlyPair?.(entity.owner, vehicle)) continue
             const radius = (this.state(vehicle).shield ? 2.8 : 1.65) * vehicle.scale
             const old = this.before.get(vehicle)?.position ?? vehicle.position
             const relativeStart = previous.clone().sub(old), relativeEnd = end.clone().sub(vehicle.position)
@@ -435,7 +490,7 @@ export class VehicleItems
         entity.mesh.position.copy(entity.position)
         entity.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), entity.direction)
         this.smoke.emit(entity, dt)
-        if(hitDistance !== Infinity) { this.detonate(entity.position); this.removeEntity(entity) }
+        if(hitDistance !== Infinity) { this.detonate(entity.position, entity.owner); this.removeEntity(entity) }
     }
 
     clearEffects(vehicle)
@@ -462,6 +517,12 @@ export class VehicleItems
         const dt = this.game.ticker.delta
         this.clock += dt
         const vehicles = this.vehicles()
+
+        // Self-preservation has priority over offensive item use.
+        for(const vehicle of vehicles)
+            if(vehicle !== this.game.physicalVehicle && this.alive(vehicle))
+                this.tryEmergencyJet(vehicle)
+
         for(const [vehicle, state] of this.states) {
             if(vehicle.destroyed) { this.clearEffects(vehicle); continue }
             if(state.shield) state.shield.mesh.position.copy(vehicle.position).add(new THREE.Vector3(0, 0.1, 0))
@@ -478,9 +539,13 @@ export class VehicleItems
             }
             for(const [key, until] of state.recentHits) if(this.clock >= until) state.recentHits.delete(key)
             if(vehicle !== this.game.physicalVehicle && this.alive(vehicle) && this.clock >= state.nextAI) {
-                state.nextAI = this.clock + 4 + Math.random() * 3
+                const profile = this.game.config?.profile
+                // Easy rivals never fire items; they keep the inventory untouched.
+                if(profile?.botItems === false) { state.nextAI = this.clock + 3; continue }
+                const frenzied = this.game.world.rivals?.isFrenzied?.(vehicle) ?? false
+                state.nextAI = this.clock + (frenzied ? 0.55 : (profile?.itemInterval ?? 4) + Math.random() * (profile?.itemRandom ?? 3))
                 const target = this.nearest(vehicle), distance = target?.position.distanceTo(vehicle.position) ?? Infinity
-                const preferred = distance < 7 && !state.shield ? 'shield' : distance < 8 ? 'jetpack' : distance < 45 ? 'missile' : 'caltrop'
+                const preferred = frenzied && distance < 45 ? 'missile' : distance < 7 && !state.shield ? 'shield' : distance < 8 ? 'jetpack' : distance < 45 ? 'missile' : 'caltrop'
                 const choices = [preferred, 'crate', 'caltrop', 'missile', 'jetpack']
                 for(const type of choices) if(this.use(vehicle, type)) break
             }

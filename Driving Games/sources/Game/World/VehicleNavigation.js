@@ -107,7 +107,9 @@ export class VehicleNavigation
         const heuristic = cell => Math.hypot(cell.ix - goal.ix, cell.iz - goal.iz)
         let best = start
 
-        for(let iteration = 0; open.size && iteration < 1800; iteration++)
+        // The map doubled in area and rivals now spawn across it, so a
+        // corner-to-corner route needs a larger exploration budget.
+        for(let iteration = 0; open.size && iteration < 4200; iteration++)
         {
             let current
             let score = Infinity

@@ -1,0 +1,174 @@
+/* Target edge markers and the survival roster. */
+
+.bot-radar {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    pointer-events: none;
+}
+
+.bot-marker {
+    position: fixed;
+    width: 20px;
+    height: 20px;
+    pointer-events: none;
+    filter: drop-shadow(0 0 7px var(--marker-color));
+    will-change: left, top, transform;
+}
+
+.bot-marker[hidden] {
+    display: none;
+}
+
+.bot-marker::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: var(--marker-color);
+    clip-path: polygon(100% 50%, 0 0, 0 100%);
+    opacity: 0.92;
+}
+
+.match-roster {
+    position: fixed;
+    top: 68px;
+    right: 20px;
+    z-index: 30;
+    width: 164px;
+    padding: 11px 13px 12px;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    background: rgba(18, 14, 24, 0.62);
+    color: #ffffff;
+    font-family: "Pally-Regular", "Segoe UI", sans-serif;
+    pointer-events: none;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+
+.match-roster[hidden] {
+    display: none;
+}
+
+.match-roster__title {
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+    color: rgba(255, 255, 255, 0.45);
+    font-size: 9px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+}
+
+.match-roster__title b {
+    color: #ffb07a;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+}
+
+.match-roster__list {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    margin: 9px 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.match-roster__row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 10px;
+    letter-spacing: 0.03em;
+}
+
+.match-roster__row i {
+    flex: 0 0 auto;
+    width: 8px;
+    height: 8px;
+    background: var(--dot);
+    transform: rotate(45deg);
+    box-shadow: 0 0 8px var(--dot);
+}
+
+.match-roster__row span {
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.match-roster__row b {
+    font-weight: 400;
+    font-size: 8px;
+    letter-spacing: 0.1em;
+    color: rgba(255, 255, 255, 0.45);
+    text-transform: uppercase;
+}
+
+.match-roster__row.is-player {
+    color: #ffe6cf;
+}
+
+.match-roster__row.is-dead {
+    opacity: 0.42;
+}
+
+.match-roster__row.is-dead span {
+    text-decoration: line-through;
+}
+
+.match-roster__row.is-dead i {
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    box-shadow: none;
+}
+
+.match-roster__row.is-revive b {
+    color: #ffb07a;
+}
+
+html.setup-open .match-roster,
+html.match-ended .match-roster,
+html.setup-open .bot-radar {
+    opacity: 0;
+    pointer-events: none;
+}
+
+@media (max-width: 760px) {
+    .match-roster {
+        top: 58px;
+        right: 10px;
+        width: 120px;
+        padding: 8px 10px 9px;
+    }
+
+    .match-roster__row {
+        font-size: 9px;
+        gap: 6px;
+    }
+
+    .match-roster__list {
+        gap: 5px;
+        margin-top: 7px;
+    }
+
+    .bot-marker {
+        width: 16px;
+        height: 16px;
+    }
+}
+
+@media (max-width: 600px) {
+    /* The roster already shows the player's lives; drop the duplicate pill. */
+    .match-hud {
+        display: none;
+    }
+
+    .match-roster {
+        top: 56px;
+        right: 8px;
+        width: 112px;
+    }
+}

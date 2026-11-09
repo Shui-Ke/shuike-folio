@@ -30,7 +30,7 @@ const assert = require('node:assert/strict')
             const response = await route.fetch()
             await route.fulfill({ response, body: await response.text() + '\nwindow.damageGsap=gsap;' })
         })
-        await page.goto('http://127.0.0.1:4195/#skip', { waitUntil: 'domcontentloaded' })
+        await page.goto('http://127.0.0.1:4195/?ai=easy#skip', { waitUntil: 'domcontentloaded' })
         await page.waitForFunction(() => window.damageGame?.reveal?.step === 2 && window.damageGame.world.rivals?.started, null, { timeout: 90000 })
         console.log('Loaded map, vehicles and water damage.')
         const result = await page.evaluate(async () => {
@@ -133,9 +133,10 @@ const assert = require('node:assert/strict')
         })
         const revived = await page.evaluate(() => {
             const g = window.damageGame
-            return { visible: g.world.visualVehicle.parts.chassis.visible, enabled: g.physicalVehicle.chassis.physical.body.isEnabled(), hintHidden: g.world.vehicleDamage.hint.hidden, onLand: g.physicalVehicle.position.distanceTo(g.respawns.getDefault().position) < 8, pieces: g.world.vehicleDamage.records.get(g.physicalVehicle).debris.length }
+            return { visible: g.world.visualVehicle.parts.chassis.visible, enabled: g.physicalVehicle.chassis.physical.body.isEnabled(), hintHidden: g.world.vehicleDamage.hint.hidden, onLand: g.physicalVehicle.position.distanceTo(g.respawns.getDefault().position) < 8, pieces: g.world.vehicleDamage.records.get(g.physicalVehicle).debris.length, lives: g.match.lives, maxLives: g.match.maxLives, canRevive: g.match.canRevive }
         })
         assert.ok(revived.visible && revived.enabled && revived.hintHidden && revived.onLand && revived.pieces === 0)
+        assert.ok(revived.maxLives === 2 && revived.lives === 1 && !revived.canRevive, 'Easy mode grants exactly one revival')
         const botResult = await page.evaluate(() => {
             const g = window.damageGame, rivals = g.world.rivals, bot = rivals.items[0], damage = g.world.vehicleDamage
             g.rendering.renderer.setAnimationLoop(null)

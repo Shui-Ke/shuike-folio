@@ -16,7 +16,8 @@ export class VehicleDamage
         this.hint.innerHTML = '<strong>车辆损坏</strong><span>车身已完全没入水中</span><button type="button">按 R 复活</button>'
         this.hint.querySelector('button').addEventListener('click', () =>
         {
-            if(this.game.physicalVehicle.destroyed && !this.game.escMenu?.isOpen) this.game.player.respawn()
+            if(this.game.physicalVehicle.destroyed && !this.game.escMenu?.isOpen)
+                this.game.match?.revive()
         })
         this.game.domElement.append(this.hint)
         this.game.ticker.events.on('tick', () => this.update(), 6)
@@ -90,7 +91,15 @@ export class VehicleDamage
             this.game.player.unstuck.delay?.kill()
             this.game.player.unstuck.delay = null
             this.game.inputs.interactiveButtons.removeItems(['unstuck'])
-            this.hint.hidden = false
+            // Lives decide whether the hint appears or the match ends.
+            this.game.match?.playerDestroyed()
+            if(!this.game.match)
+                this.hint.hidden = false
+        }
+        else
+        {
+            this.game.world.rivals?.onBotDestroyed(vehicle)
+            this.game.match?.botDestroyed()
         }
         return true
     }
@@ -213,7 +222,7 @@ export class VehicleDamage
         for(const record of this.records.values())
         {
             const vehicle = record.vehicle
-            if(!vehicle.destroyed && vehicle.chassis.physical.body.isEnabled() && !(record.isPlayer && this.game.player.respawning))
+            if(!this.game.match?.ended && !vehicle.destroyed && vehicle.chassis.physical.body.isEnabled() && !(record.isPlayer && this.game.player.respawning))
             {
                 if(this.highestBodyPoint(record) < this.game.water.surfaceElevationUniform.value)
                     this.destroy(vehicle)

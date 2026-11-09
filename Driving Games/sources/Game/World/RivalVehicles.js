@@ -3,11 +3,14 @@ import { Game } from '../Game.js'
 import { PhysicsVehicle } from '../Physics/PhysicsVehicle.js'
 import { VisualVehicle } from './VisualVehicle.js'
 import { VehicleNavigation } from './VehicleNavigation.js'
+import { speedWhiteValue } from '../VehicleUpgrades.js'
 
 const PAINTS = [
     { name: 'blue', top: '#38bfff', bottom: '#174db5' },
     { name: 'yellow', top: '#ffe15b', bottom: '#d67b13' },
     { name: 'purple', top: '#d38bff', bottom: '#7131bb' },
+    { name: 'cyan', top: '#5ce1e6', bottom: '#0a5f66' },
+    { name: 'green', top: '#63e06b', bottom: '#1a6b2a' },
 ]
 
 export class RivalVehicles
@@ -20,6 +23,7 @@ export class RivalVehicles
         this.time = 0
         this.started = false
         this.warmupFrames = 2
+        this.escapePoint = new THREE.Vector3()
         this.tickCallback = () => this.update()
         this.game.ticker.events.on('tick', this.tickCallback, 1)
     }
@@ -38,23 +42,43 @@ export class RivalVehicles
 
     start()
     {
-        this.navigation = new VehicleNavigation(this.game)
+        this.navigation = this.game.navigation ?? new VehicleNavigation(this.game)
+        this.profile = this.game.config.profile
         this.configureCollision(this.game.physicalVehicle)
-        for(let index = 0; index < PAINTS.length; index++)
+
+        // Hard rivals press the advantage whenever an explosion lands near them.
+        if(this.profile.frenzy)
+        {
+            this.momentumCallback = position => this.onMomentum(position)
+            this.game.explosions.events.on('explode', this.momentumCallback)
+            this.game.explosions.events.on('impact', this.momentumCallback)
+        }
+
+        const count = Math.min(this.game.config.bots, PAINTS.length)
+        const reserved = this.game.config.paint
+        const paints = PAINTS.filter(paint => paint.name !== reserved)
+        // Extreme runs a split squad: a fixed chase pack plus item runners.
+        const chaseCount = Math.min(this.profile.chaseSquad ?? count, count)
+        this.nextRoleUpdate = 0
+
+        for(let index = 0; index < count; index++)
         {
             const controls = { accelerating: 0, steering: 0, braking: 0, boosting: 0, suspensions: ['low', 'low', 'low', 'low'] }
             const vehicle = new PhysicsVehicle({ controls })
             this.configureCollision(vehicle)
             vehicle.deactivate()
-            const paint = PAINTS[index]
+            const paint = paints[index] ?? PAINTS[index]
             const material = this.game.materials.createGradient(`rival-${paint.name}`, paint.top, paint.bottom)
             const visual = new VisualVehicle(this.model.clone(true), { physicalVehicle: vehicle, controls, paintMaterial: material })
             const bot = {
-                index, color: paint.name, controls, vehicle, visual,
+                index, color: paint.name, colorCss: paint.top, controls, vehicle, visual,
                 state: 'waiting', target: null, route: [], nextRoute: 0,
                 nextTarget: index * 1.5, reverseUntil: 0, reverseSteer: 1,
                 chargeUntil: 0, nextCharge: 3 + index, stuckTime: 0,
                 upsideTime: 0, lastFlip: -10, recoveries: 0, nextSpawn: 0,
+                aimPoint: new THREE.Vector3(), catchUpUntil: 0, nextCatchUp: 0,
+                frenzyUntil: 0, lives: this.profile.botLives ?? 1,
+                role: index < chaseCount ? 'chase' : 'collect',
             }
             this.items.push(bot)
             this.game.world.vehicleDamage.register(vehicle, visual)
@@ -72,17 +96,25 @@ export class RivalVehicles
 
     spawnPosition(bot)
     {
-        const anchor = this.game.physicalVehicle.position
-        for(let attempt = 0; attempt < 48; attempt++)
+        // Rivals appear anywhere on the island, never next to the player, so a
+        // match starts spread out instead of with three cars already on you.
+        const random = this.game.config.random
+        const bound = this.game.water.ocean.start * 0.97
+        const player = this.game.physicalVehicle.position
+
+        for(let attempt = 0; attempt < 600; attempt++)
         {
-            const angle = bot.index * Math.PI * 2 / 3 + attempt * 2.39996
-            const radius = 11 + Math.floor(attempt / 12) * 5
-            const ground = this.navigation.sample(anchor.x + Math.cos(angle) * radius, anchor.z + Math.sin(angle) * radius)
+            const x = (random() * 2 - 1) * bound
+            const z = (random() * 2 - 1) * bound
+            const ground = this.navigation.sample(x, z)
             if(!ground) continue
+
             const position = ground.clone().add(new THREE.Vector3(0, 1.7, 0))
-            // New bodies are absent from Rapier's query index until the next step.
-            // Check other cars explicitly when spawning several in the same frame.
-            if(this.items.some(other => other !== bot && other.state !== 'waiting' && other.vehicle.position.distanceTo(position) < 6)) continue
+            if(position.distanceTo(player) < 42) continue
+            // New bodies are absent from Rapier's query index until the next
+            // step. Check other cars explicitly when spawning several at once.
+            if(this.items.some(other => other !== bot && other.state !== 'waiting' && other.vehicle.position.distanceTo(position) < 20)) continue
+
             let occupied = false
             this.game.physics.world.intersectionsWithShape(
                 position, this.navigation.identity, new this.game.RAPIER.Ball(2.8),
@@ -91,7 +123,7 @@ export class RivalVehicles
                 collider => !collider.isSensor() && !this.navigation.isGround(collider)
             )
             if(occupied) continue
-            if(!this.navigation.clearLine(ground, anchor) && this.navigation.path(ground, anchor, false).length === 0) continue
+
             return position
         }
         return null
@@ -99,10 +131,18 @@ export class RivalVehicles
 
     respawn(bot)
     {
-        if(bot.vehicle.destroyed) return false
+        if(bot.vehicle.destroyed && !this.canReviveBot(bot))
+            return false
+
         const position = this.spawnPosition(bot)
         bot.nextSpawn = this.time + 2
-        if(!position) return false
+        if(!position)
+            return false
+
+        // Extreme rivals spend their spare life only once a safe spot exists.
+        if(bot.vehicle.destroyed)
+            this.game.world.vehicleDamage.revive(bot.vehicle)
+
         const target = this.game.physicalVehicle.position
         const yaw = -Math.atan2(target.z - position.z, target.x - position.x)
         bot.vehicle.moveTo(position, yaw)
@@ -113,30 +153,302 @@ export class RivalVehicles
         bot.state = 'chase'
         bot.stuckTime = bot.upsideTime = bot.recoveries = 0
         bot.reverseUntil = 0
+        bot.frenzyUntil = 0
         bot.nextRoute = 0
         bot.route = []
         this.setVisible(bot, true)
+        this.updateRoles(true)
         return true
     }
 
     chooseTarget(bot)
     {
+        // Extreme rivals ignore each other and pile onto the player. They fall
+        // back to normal rotation while the player is wrecked/reviving.
+        const player = this.game.physicalVehicle
+        if(this.profile.focusPlayer && !player.destroyed && player.chassis.physical.body.isEnabled())
+        {
+            bot.target = player
+            bot.nextTarget = this.time + 30
+            bot.nextRoute = 0
+            return
+        }
+
         const opponents = [this.game.physicalVehicle, ...this.items.filter(other => other !== bot && other.state !== 'waiting').map(other => other.vehicle)]
         // Alternate opponents so the player is not permanently dogpiled.
         const available = opponents.filter(vehicle => vehicle !== bot.target && vehicle.chassis.physical.body.isEnabled())
         bot.target = available[Math.floor(Math.random() * available.length)] ?? opponents[0]
-        bot.nextTarget = this.time + 5 + Math.random() * 3
+        bot.nextTarget = this.time + this.profile.targetMin + Math.random() * this.profile.targetRandom
         bot.nextRoute = 0
     }
 
     reverse(bot)
     {
-        bot.reverseUntil = this.time + 1.3
+        bot.reverseUntil = this.time + this.profile.reverseTime
         bot.reverseSteer = (bot.index + bot.recoveries) % 2 ? 1 : -1
         bot.recoveries++
         bot.stuckTime = 0
         bot.nextRoute = 0
         bot.chargeUntil = 0
+    }
+
+    // "Momentum": an explosion or a heavy launch nearby is a cue to chain
+    // another attack instead of waiting out the usual cooldowns.
+    onMomentum(position)
+    {
+        if(!this.started || !this.profile.frenzy)
+            return
+
+        const range = this.profile.frenzyRange
+        for(const bot of this.items)
+        {
+            if(bot.vehicle.destroyed || bot.state === 'waiting')
+                continue
+
+            const targetDistance = bot.target?.position.distanceTo(position) ?? Infinity
+            const selfDistance = bot.vehicle.position.distanceTo(position)
+            if(selfDistance > range && targetDistance > range)
+                continue
+
+            bot.frenzyUntil = this.time + this.profile.frenzyDuration
+            bot.nextCharge = Math.min(bot.nextCharge, this.time)
+            bot.nextRoute = Math.min(bot.nextRoute, this.time + 0.1)
+            bot.catchUpUntil = Math.max(bot.catchUpUntil, this.time + 1.2)
+
+            // Let the follow-up item fire immediately (usually a missile).
+            const items = this.game.world.items
+            if(items)
+            {
+                const state = items.state(bot.vehicle)
+                state.nextAI = Math.min(state.nextAI, items.clock)
+            }
+        }
+    }
+
+    isFrenzied(vehicle)
+    {
+        if(!this.profile?.frenzy)
+            return false
+
+        for(const bot of this.items)
+            if(bot.vehicle === vehicle)
+                return this.time < (bot.frenzyUntil ?? 0)
+
+        return false
+    }
+
+    // Extreme runs a split squad: chasers never detour, runners keep fetching
+    // items for the pack. Easy rivals cannot use consumables, so they only
+    // chase upgrades.
+    findPickup(bot)
+    {
+        const vehicle = bot.vehicle
+        const powerups = this.game.world.powerups
+        if(!powerups)
+            return null
+
+        if(this.profile.chaseSquad)
+        {
+            if(bot.role === 'chase')
+                return null
+
+            const upgrade = powerups.nearestFor(vehicle, { upgradesOnly: true, range: this.profile.buffRange ?? 60 })
+            if(upgrade)
+                return upgrade
+
+            return powerups.nearestFor(vehicle, { range: this.profile.buffRange ?? 60 })
+        }
+
+        if(this.profile.botItems === false)
+            return powerups.nearestFor(vehicle, { upgradesOnly: true, range: 24 })
+
+        return powerups.nearestFor(vehicle)
+    }
+
+    // Keep three rivals on the player while two farm; promote/demote as cars
+    // die, revive, or the map runs out of pickups.
+    updateRoles(force = false)
+    {
+        if(!this.profile?.chaseSquad)
+            return
+        if(!force && this.time < this.nextRoleUpdate)
+            return
+
+        this.nextRoleUpdate = this.time + (this.profile.roleRefresh ?? 2)
+
+        const alive = this.items.filter(bot => !bot.vehicle.destroyed && bot.state !== 'waiting')
+        if(!alive.length)
+            return
+
+        const player = this.game.physicalVehicle.position
+        const distance = bot => bot.vehicle.position.distanceToSquared(player)
+        const collectible = this.game.world.powerups?.items?.some(item => item.active) ?? false
+
+        let desired = Math.min(this.profile.chaseSquad, alive.length)
+        // Nothing left to farm: the whole pack joins the hunt.
+        if(!collectible)
+            desired = alive.length
+
+        const chasers = alive.filter(bot => bot.role === 'chase')
+
+        if(chasers.length < desired)
+        {
+            const candidates = alive
+                .filter(bot => bot.role !== 'chase')
+                .sort((a, b) => distance(a) - distance(b))
+
+            while(chasers.length < desired && candidates.length)
+            {
+                const bot = candidates.shift()
+                bot.role = 'chase'
+                chasers.push(bot)
+            }
+        }
+        else if(chasers.length > desired)
+        {
+            chasers.sort((a, b) => distance(b) - distance(a))
+
+            while(chasers.length > desired)
+                chasers.shift().role = 'collect'
+        }
+    }
+
+    botFor(vehicle)
+    {
+        for(const bot of this.items)
+            if(bot.vehicle === vehicle)
+                return bot
+
+        return null
+    }
+
+    // Same numbers the combat system uses: speed white value × POWER.
+    impactStrength(vehicle)
+    {
+        const velocity = vehicle.chassis.physical.body.linvel()
+        const forwardSpeed = velocity.x * vehicle.forward.x + velocity.z * vehicle.forward.z
+        const speed = speedWhiteValue(Math.abs(forwardSpeed), vehicle.upgrades.speedMultiplier, vehicle.drivingSpeedRange.normal, vehicle.drivingSpeedRange.boost)
+        return vehicle.upgrades.powerMultiplier * speed
+    }
+
+    canReviveBot(bot)
+    {
+        return !!bot && (bot.lives ?? 0) > 0
+    }
+
+    // Extreme rivals are a pack: collisions between them never deal damage.
+    isFriendlyPair(a, b)
+    {
+        if(!this.profile?.noFriendlyFire || !a || !b)
+            return false
+
+        const player = this.game.physicalVehicle
+        return a !== player && b !== player
+    }
+
+    // Airborne over water: steer for the closest dry ground instead of the
+    // target, so a mid-air jetpack can actually reach the shore.
+    escapeAim(vehicle)
+    {
+        if(!vehicle.jumpState.airborne)
+            return null
+
+        const navigation = this.game.navigation
+        if(!navigation)
+            return null
+
+        const position = vehicle.position
+        const ground = navigation.groundAt(position.x, position.z)
+        if(ground !== null && this.game.water.depthAt({ x: position.x, y: ground, z: position.z }) <= 0.15)
+            return null
+
+        let best = null
+        let bestDistance = Infinity
+        for(let i = 0; i < 12; i++)
+        {
+            const angle = i / 12 * Math.PI * 2
+            for(const radius of [12, 22, 34])
+            {
+                const x = position.x + Math.cos(angle) * radius
+                const z = position.z + Math.sin(angle) * radius
+                const sample = navigation.groundAt(x, z)
+                if(sample === null)
+                    continue
+                if(this.game.water.depthAt({ x, y: sample, z }) > 0.15)
+                    continue
+                if(radius < bestDistance)
+                {
+                    bestDistance = radius
+                    best = { x, z }
+                }
+                break
+            }
+        }
+
+        if(!best)
+            return null
+
+        return this.escapePoint.set(best.x, position.y, best.z)
+    }
+
+    // Keep pack members from ramming each other while they converge.
+    separateFromMates(bot, heading)
+    {
+        const position = bot.vehicle.position
+        const forwardX = Math.cos(heading), forwardZ = Math.sin(heading)
+
+        for(const other of this.items)
+        {
+            if(other === bot || other.state === 'waiting' || other.vehicle.destroyed)
+                continue
+
+            const dx = other.vehicle.position.x - position.x
+            const dz = other.vehicle.position.z - position.z
+            if(dx * dx + dz * dz > 25)
+                continue
+            if(dx * forwardX + dz * forwardZ < 0.5)
+                continue
+
+            const side = dx * -forwardZ + dz * forwardX
+            bot.controls.steering = side > 0 ? -0.9 : 0.9
+            return true
+        }
+
+        return false
+    }
+
+    // VehicleItems asks this so extreme missiles lock onto the player.
+    focusTargetOf(vehicle)
+    {
+        if(!this.profile?.focusPlayer)
+            return null
+
+        return this.botFor(vehicle) ? this.game.physicalVehicle : null
+    }
+
+    onBotDestroyed(vehicle)
+    {
+        const bot = this.botFor(vehicle)
+        if(!bot)
+            return
+
+        bot.lives = Math.max(0, (bot.lives ?? 1) - 1)
+        if(bot.lives <= 0)
+        {
+            this.updateRoles(true)
+            return
+        }
+
+        // Spare life: come back after a short delay instead of staying wrecked.
+        bot.state = 'waiting'
+        bot.stuckTime = bot.upsideTime = bot.recoveries = 0
+        bot.reverseUntil = 0
+        bot.frenzyUntil = 0
+        bot.nextRoute = 0
+        bot.route = []
+        bot.nextSpawn = this.time + 2
+        this.setVisible(bot, false)
+        this.updateRoles(true)
     }
 
     updateBot(bot, dt)
@@ -145,9 +457,33 @@ export class RivalVehicles
         controls.accelerating = controls.steering = controls.boosting = controls.braking = 0
         if(vehicle.destroyed)
         {
+            // Extreme rivals wait out a short delay, then spend their spare life.
+            if(bot.state === 'waiting' && this.canReviveBot(bot))
+            {
+                if(this.time >= bot.nextSpawn)
+                    this.respawn(bot)
+                return
+            }
+
             bot.state = 'destroyed'
             return
         }
+        // Airborne over water beats any other goal: aim for the nearest shore.
+        const escape = this.escapeAim(vehicle)
+        if(escape)
+        {
+            const heading = Math.atan2(vehicle.forward.z, vehicle.forward.x)
+            const desired = Math.atan2(escape.z - vehicle.position.z, escape.x - vehicle.position.x)
+            const error = Math.atan2(Math.sin(desired - heading), Math.cos(desired - heading))
+            controls.steering = THREE.MathUtils.clamp(-error * this.profile.steerGain, -1, 1)
+            controls.accelerating = 1
+            controls.boosting = 1
+            bot.aimPoint.copy(escape)
+            bot.state = 'escape'
+            if(bot.visual.antenna) bot.visual.antenna.target.copy(escape)
+            return
+        }
+
         if(vehicle.launch?.active) { bot.state = 'launched'; return }
         if(bot.state === 'waiting')
         {
@@ -195,15 +531,35 @@ export class RivalVehicles
             return
         }
         if(!bot.target || this.time > bot.nextTarget || !bot.target.chassis.physical.body.isEnabled()) this.chooseTarget(bot)
-        const pickup = this.game.world.powerups?.nearestFor(vehicle)
+        const profile = this.profile
+        const frenzied = this.time < bot.frenzyUntil
+        const pickup = this.findPickup(bot)
         if(bot.pickupId !== (pickup?.id ?? null)) { bot.pickupId = pickup?.id ?? null; bot.nextRoute = 0 }
-        const target = pickup?.position ?? bot.target.position
+
+        // Hard rivals lead the target and fan out instead of queuing behind it.
+        bot.aimPoint.copy(pickup?.position ?? bot.target.position)
+        if(!pickup)
+        {
+            if(profile.lead)
+                bot.aimPoint.addScaledVector(bot.target.velocity, profile.lead / this.game.ticker.deltaScaled)
+            if(profile.flank)
+            {
+                // Spread every rival across the target's width: -1 … +1.
+                const count = Math.max(1, this.items.length)
+                const spread = count > 1 ? (bot.index - (count - 1) / 2) / ((count - 1) / 2) : 0
+                const side = profile.flank * spread
+                bot.aimPoint.x += -bot.target.forward.z * side
+                bot.aimPoint.z += bot.target.forward.x * side
+            }
+        }
+
+        const target = bot.aimPoint
         const distance = Math.hypot(target.x - position.x, target.z - position.z)
         if(this.time >= bot.nextRoute)
         {
-            bot.direct = distance < 30 && this.navigation.clearLine(position, target)
+            bot.direct = distance < profile.directRange && this.navigation.clearLine(position, target)
             bot.route = bot.direct ? [] : this.navigation.path(position, target)
-            bot.nextRoute = this.time + 0.9 + bot.index * 0.12
+            bot.nextRoute = this.time + profile.routeInterval + bot.index * 0.12
         }
         while(bot.route.length && Math.hypot(bot.route[0].x - position.x, bot.route[0].z - position.z) < 2.5) bot.route.shift()
         const aim = bot.direct ? target : bot.route[0]
@@ -219,7 +575,7 @@ export class RivalVehicles
         const heading = Math.atan2(vehicle.forward.z, vehicle.forward.x)
         const desired = Math.atan2(aim.z - position.z, aim.x - position.x)
         const error = Math.atan2(Math.sin(desired - heading), Math.cos(desired - heading))
-        controls.steering = THREE.MathUtils.clamp(-error * 1.8, -1, 1)
+        controls.steering = THREE.MathUtils.clamp(-error * profile.steerGain, -1, 1)
         controls.accelerating = Math.abs(error) > 1 ? 0.6 : 1
         bot.state = pickup ? 'scavenge' : 'chase'
 
@@ -246,21 +602,75 @@ export class RivalVehicles
             bot.chargeUntil = 0
             bot.nextRoute = Math.min(bot.nextRoute, this.time + 0.25)
         }
-        else if(bot.direct && distance > 6 && distance < 22 && Math.abs(error) < 0.22 && this.time >= bot.nextCharge)
+        else if(bot.direct && distance > profile.chargeNear && distance < profile.chargeFar && Math.abs(error) < profile.chargeError && this.time >= bot.nextCharge)
         {
-            bot.chargeUntil = this.time + 0.75
-            bot.nextCharge = this.time + 4 + Math.random() * 2
+            bot.chargeUntil = this.time + profile.chargeWindow
+            bot.nextCharge = this.time + (frenzied ? 0.9 : profile.chargeCooldown + Math.random() * profile.chargeCooldownRandom)
         }
+
+        // A distant rival may keep boosting to close the gap. This is the same
+        // resource the player holds with Shift, not a hidden speed multiplier.
+        if(profile.catchUp && !pickup && distance > profile.catchUp && this.time >= bot.nextCatchUp)
+        {
+            bot.catchUpUntil = this.time + profile.catchUpDuration
+            bot.nextCatchUp = this.time + 6
+        }
+
+        // Extreme rivals check their own impact force before committing: a hit
+        // only pays off when speed × POWER can reach the heavy-launch threshold.
+        if(profile.heavyRam && !pickup && bot.target === this.game.physicalVehicle)
+        {
+            const strength = this.impactStrength(vehicle)
+            const aligned = bot.direct && !blocked && ahead && Math.abs(error) < 0.2
+
+            if(aligned && distance > 9 && distance < profile.directRange && strength >= profile.ramStrength)
+            {
+                bot.chargeUntil = Math.max(bot.chargeUntil, this.time + 1.2)
+                bot.nextCharge = this.time + 2.4
+                bot.state = 'ram'
+                controls.boosting = 1
+                controls.braking = 0
+            }
+            else if(strength < profile.ramStrength)
+            {
+                if(distance < 9)
+                {
+                    // Too close for a strong hit: swerve off and build speed again.
+                    bot.chargeUntil = 0
+                    controls.accelerating = 0.35
+                    controls.braking = Math.max(controls.braking, 0.4)
+                    controls.steering = bot.index % 2 ? 1 : -1
+                }
+                else if(!blocked && ahead && Math.abs(error) < 0.6)
+                {
+                    controls.boosting = 1
+                }
+            }
+        }
+
         if(this.time < bot.chargeUntil && Math.abs(error) < 0.45 && vehicle.speed < 16 && !blocked && ahead)
         {
             controls.boosting = 1
             bot.state = 'charge'
         }
+        else if(this.time < bot.catchUpUntil && !blocked && ahead && Math.abs(error) < 0.5)
+        {
+            controls.boosting = 1
+            bot.state = 'pursuit'
+        }
+        // Pack members sidestep each other instead of rear-ending on the way in.
+        if(this.profile.packSpacing && this.separateFromMates(bot, heading))
+        {
+            controls.boosting = 0
+            bot.chargeUntil = 0
+            bot.state = 'spacing'
+        }
+
         if(Math.abs(error) > 0.7 && vehicle.speed > 7) controls.braking = 0.25
         if(vehicle.upgrades.jump && vehicle.jumpState.airborne && vehicle.jumpState.used === 1 && vehicle.chassis.physical.body.linvel().y < -0.5) vehicle.requestJump()
 
         bot.stuckTime = vehicle.speed < 0.65 ? bot.stuckTime + dt : Math.max(0, bot.stuckTime - dt * 0.5)
-        if(bot.stuckTime > 1.8 || (distance < 3.2 && vehicle.speed < 2)) this.reverse(bot)
+        if(bot.stuckTime > profile.stuckLimit || (distance < 3.2 && vehicle.speed < 2)) this.reverse(bot)
         if(bot.recoveries >= 4)
         {
             this.respawn(bot)
@@ -272,7 +682,7 @@ export class RivalVehicles
 
     update()
     {
-        const ready = !this.game.editorPaused && !this.game.escMenu?.isOpen &&
+        const ready = !this.game.editorPaused && !this.game.escMenu?.isOpen && !this.game.match?.ended &&
             !this.game.inputs.filters.has('intro') && this.game.player.state === 1 &&
             this.game.physicalVehicle.chassis.physical.body.isEnabled()
         if(!ready)
@@ -300,6 +710,7 @@ export class RivalVehicles
         }
         const dt = this.game.ticker.delta
         this.time += dt
+        this.updateRoles()
         for(const bot of this.items)
         {
             if(bot.suspended)

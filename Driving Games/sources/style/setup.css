@@ -1,0 +1,346 @@
+/* Pre-match setup overlay. Shares the visual language of the pause menu:
+   dark violet panel, orange accent, uppercase micro labels. */
+
+.setup-screen {
+    position: fixed;
+    inset: 0;
+    z-index: 120;
+    display: grid;
+    place-items: center;
+    padding: 16px;
+    color: #ffffff;
+    font-family: "Pally-Regular", "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+}
+
+.setup-screen[hidden] {
+    display: none;
+}
+
+.setup-screen__backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(8, 6, 12, 0.72);
+    backdrop-filter: blur(14px) saturate(0.75);
+    -webkit-backdrop-filter: blur(14px) saturate(0.75);
+}
+
+.setup-panel {
+    position: relative;
+    width: min(980px, calc(100vw - 32px));
+    max-height: calc(100vh - 32px);
+    overflow: auto;
+    background: radial-gradient(ellipse at top left, #2b2233, #17131c 72%);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 40px 120px rgba(0, 0, 0, 0.6);
+    animation: setup-in 220ms ease-out;
+}
+
+.setup-panel::after {
+    content: "";
+    position: absolute;
+    inset: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    pointer-events: none;
+}
+
+@keyframes setup-in {
+    from {
+        opacity: 0;
+        transform: translateY(14px) scale(0.99);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.setup-panel__header {
+    padding: 28px 30px 18px;
+}
+
+.setup-panel__eyebrow {
+    color: #ff8641;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+}
+
+.setup-panel__title {
+    margin: 6px 0 0;
+    font-family: "Pally-Bold", "Segoe UI", sans-serif;
+    font-size: clamp(36px, 5vw, 54px);
+    font-weight: 700;
+    line-height: 0.94;
+    letter-spacing: -0.04em;
+}
+
+.setup-panel__lead {
+    margin: 12px 0 0;
+    color: rgba(255, 255, 255, 0.48);
+    font-size: 10px;
+    line-height: 1.6;
+    letter-spacing: 0.02em;
+}
+
+.setup-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 26px;
+    padding: 6px 30px 22px;
+}
+
+.setup-field {
+    padding: 16px 0 18px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.setup-field h2 {
+    margin: 0 0 12px;
+    color: rgba(255, 255, 255, 0.62);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+}
+
+/* Paint swatches */
+
+.setup-swatches {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.setup-swatch {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 7px;
+    width: 62px;
+    padding: 8px 4px 7px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.025);
+    color: rgba(255, 255, 255, 0.6);
+    font: inherit;
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    transition: border-color 150ms ease, background 150ms ease, color 150ms ease;
+}
+
+.setup-swatch__chip {
+    width: 100%;
+    height: 26px;
+    background: linear-gradient(180deg, var(--paint-top), var(--paint-bottom));
+    border: 1px solid rgba(0, 0, 0, 0.35);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.setup-swatch:hover {
+    border-color: rgba(255, 134, 65, 0.55);
+    color: #ffffff;
+}
+
+.setup-swatch.is-active {
+    border-color: #ff8641;
+    background: rgba(255, 134, 65, 0.12);
+    color: #ffffff;
+}
+
+/* Number / preset choices */
+
+.setup-choices {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+}
+
+.setup-choice {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+    min-width: 62px;
+    padding: 9px 11px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.025);
+    color: rgba(255, 255, 255, 0.6);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 150ms ease, background 150ms ease, color 150ms ease;
+}
+
+.setup-choice b {
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+}
+
+.setup-choice small {
+    color: rgba(255, 255, 255, 0.38);
+    font-size: 8px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+.setup-choice:hover {
+    border-color: rgba(255, 134, 65, 0.55);
+}
+
+.setup-choice.is-active {
+    border-color: #ff8641;
+    background: rgba(255, 134, 65, 0.12);
+}
+
+.setup-choice.is-active small {
+    color: rgba(255, 176, 122, 0.75);
+}
+
+.setup-choices--wide .setup-choice {
+    min-width: 92px;
+}
+
+/* Difficulty cards */
+
+.setup-cards {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.setup-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px 12px 13px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.025);
+    color: rgba(255, 255, 255, 0.55);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 150ms ease, background 150ms ease;
+}
+
+.setup-card b {
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.setup-card small {
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 8px;
+    line-height: 1.5;
+}
+
+.setup-card:hover {
+    border-color: rgba(255, 134, 65, 0.55);
+}
+
+.setup-card.is-active {
+    border-color: #ff8641;
+    background: rgba(255, 134, 65, 0.12);
+}
+
+/* Footer */
+
+.setup-panel__footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    padding: 14px 30px 18px;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.setup-panel__hint {
+    margin: 0;
+    color: rgba(255, 255, 255, 0.32);
+    font-size: 8px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.setup-start {
+    flex: 0 0 auto;
+    padding: 13px 30px;
+    border: 1px solid #ff8641;
+    background: linear-gradient(180deg, rgba(255, 134, 65, 0.28), rgba(255, 134, 65, 0.12));
+    color: #ffffff;
+    font-family: "Pally-Bold", "Segoe UI", sans-serif;
+    font-size: 12px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+
+.setup-start:hover,
+.setup-start:focus-visible {
+    background: linear-gradient(180deg, rgba(255, 134, 65, 0.5), rgba(255, 134, 65, 0.22));
+    box-shadow: 0 0 0 3px rgba(255, 134, 65, 0.16);
+    outline: none;
+    transform: translateY(-1px);
+}
+
+/* Keep the driving HUD and the settings trigger out of the way. */
+html.setup-open .clean-hud,
+html.setup-open .clean-menu-trigger {
+    opacity: 0;
+    pointer-events: none;
+}
+
+@media (max-width: 860px) {
+    .setup-grid {
+        grid-template-columns: 1fr;
+        gap: 0;
+        padding: 4px 20px 14px;
+    }
+
+    .setup-panel__header {
+        padding: 22px 20px 14px;
+    }
+
+    .setup-panel__footer {
+        flex-direction: column;
+        align-items: stretch;
+        padding: 14px 20px 18px;
+    }
+
+    .setup-start {
+        width: 100%;
+        padding: 14px 20px;
+    }
+}
+
+@media (max-width: 520px) {
+    .setup-screen {
+        padding: 8px;
+    }
+
+    .setup-panel {
+        width: calc(100vw - 16px);
+        max-height: calc(100vh - 16px);
+    }
+
+    .setup-panel__title {
+        font-size: 34px;
+    }
+
+    .setup-panel__hint {
+        display: none;
+    }
+
+    .setup-cards {
+        grid-template-columns: 1fr;
+    }
+
+    .setup-swatch {
+        width: 58px;
+    }
+}

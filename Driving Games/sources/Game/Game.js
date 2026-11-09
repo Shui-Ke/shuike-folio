@@ -1,8 +1,14 @@
 import * as THREE from 'three/webgpu'
 
 import { Debug } from './Debug.js'
+import { Config } from './Config.js'
+import { SetupScreen } from './SetupScreen.js'
+import { Match } from './Match.js'
+import { BotRadar } from './BotRadar.js'
+import { Roster } from './Roster.js'
 import { Inputs } from './Inputs/Inputs.js'
 import { Physics } from './Physics/Physics.js'
+import { VehicleNavigation } from './World/VehicleNavigation.js'
 import { Rendering } from './Rendering.js'
 import { ResourcesLoader } from './ResourcesLoader.js'
 import { Ticker } from './Ticker.js'
@@ -71,6 +77,7 @@ export class Game
         // Setup
         this.domElement = document.querySelector('.game')
         this.canvasElement = this.domElement.querySelector('.js-canvas')
+        this.config = new Config()
         document.documentElement.classList.add('is-started')
 
         // First batch for intro
@@ -171,6 +178,7 @@ export class Game
         MapExpansion.prepare(this)
         this.terrain = new Terrain()
         this.physics = new Physics()
+        this.navigation = new VehicleNavigation(this)
         this.wireframe = new PhysicsWireframe()
         this.physicalVehicle = new PhysicsVehicle()
         this.zones = new Zones()
@@ -180,8 +188,20 @@ export class Game
         // this.monitoring = new Monitoring()
         this.world.step(1)
 
+        // The floor and every prop exist from here on, so the random spawn can
+        // be validated against real physics instead of guessed heights.
+        // Rapier only refreshes its query pipeline during a step, and the
+        // raycasts in `sample()` would otherwise miss freshly built colliders.
+        this.physics.world.step()
+        this.spawn = this.pickSpawn()
+        this.applySpawn(this.spawn)
+
         this.overlay = new Overlay()
         this.escMenu = new EscMenu(this)
+        this.setupScreen = new SetupScreen(this)
+        this.match = new Match(this)
+        this.radar = new BotRadar(this)
+        this.roster = new Roster(this)
 
         // Pre-render if quality high
         if(this.quality.level === 0 && this.rendering.renderer.backend.isWebGPUBackend)
@@ -197,6 +217,62 @@ export class Game
         {
             this.achievements.setProgress('debug', 1)
         }
+    }
+
+    pickSpawn()
+    {
+        const configured = this.config.spawn ? this.respawns.getByName(this.config.spawn) : null
+        if(configured)
+            return { position: configured.position.clone(), rotation: configured.rotation }
+
+        const random = this.config.random
+        // Stay inside the authored island: past the ocean start the terrain
+        // drops under the water plane and `sample()` would reject it anyway.
+        const bound = this.water.ocean.start * 0.97
+
+        for(let attempt = 0; attempt < 1200; attempt++)
+        {
+            const x = (random() * 2 - 1) * bound
+            const z = (random() * 2 - 1) * bound
+            const ground = this.navigation.sample(x, z)
+            if(!ground)
+                continue
+
+            return {
+                position: new THREE.Vector3(x, ground.y + 2.2, z),
+                rotation: random() * Math.PI * 2,
+            }
+        }
+
+        const fallback = this.respawns.getDefault()
+        return { position: fallback.position.clone(), rotation: fallback.rotation }
+    }
+
+    applySpawn(spawn)
+    {
+        const respawn = this.respawns.getDefault()
+        respawn.position.copy(spawn.position)
+        respawn.rotation = spawn.rotation
+
+        const vehicle = this.physicalVehicle
+        vehicle.moveTo(spawn.position, spawn.rotation)
+        const physical = vehicle.chassis.physical
+        physical.initialState.position = { ...spawn.position }
+        physical.initialState.rotation = { ...physical.body.rotation() }
+
+        if(this.player)
+        {
+            this.player.position.copy(spawn.position)
+            this.player.basePosition.copy(spawn.position)
+            this.player.position2.set(spawn.position.x, spawn.position.z)
+            this.player.rotationY = spawn.rotation
+        }
+
+        // Everything that was centred on the authored spawn follows the roll.
+        this.world.intro?.recenter(spawn.position)
+        this.world.grid?.recenter(spawn.position)
+        this.reveal?.recenter(spawn.position)
+        this.view?.recenter(spawn.position)
     }
 
     reset()

@@ -275,7 +275,7 @@ export class EscMenu
 
     open()
     {
-        if(this.isOpen)
+        if(this.isOpen || this.game.setupScreen?.isOpen || this.game.match?.ended)
             return
 
         this.isOpen = true

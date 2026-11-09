@@ -64,6 +64,8 @@ export class VehicleCombat
             if(!points.length) continue
             touching.add(key)
             if(this.touching.has(key) || this.clock < (this.cooldowns.get(key) ?? 0)) continue
+            // Extreme rivals are a pack and never damage each other.
+            if(this.game.world.rivals?.isFriendlyPair?.(a, b)) continue
             // Decide both directions from the same pre-solver snapshot.
             const hits = [this.assessHit(a, b, points), this.assessHit(b, a, points)].filter(Boolean)
             for(const hit of hits) this.applyHit(hit)
@@ -149,6 +151,9 @@ export class VehicleCombat
         const screen = hit.point.clone().project(this.game.view.camera)
         if(attacker === this.game.physicalVehicle || target === this.game.physicalVehicle || (Math.abs(screen.x) < 1 && Math.abs(screen.y) < 1 && screen.z < 1)) this.shot = flight
         hit.launchRange = range
+
+        // Heavy impacts are momentum cues too (the launch itself is the shock).
+        this.game.explosions.events.trigger('impact', [hit.point.clone(), hit.strength])
     }
 
     updateFlights()

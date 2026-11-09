@@ -93,6 +93,12 @@ export class Grid
         this.game.scene.add(this.mesh)
     }
 
+    recenter(position)
+    {
+        this.mesh.position.x = position.x
+        this.mesh.position.z = position.z
+    }
+
     destroy()
     {
         this.mesh.material.dispose()

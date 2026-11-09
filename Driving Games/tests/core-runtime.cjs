@@ -50,6 +50,7 @@ const assert = require('node:assert/strict')
         const wheelRatio = await page.evaluate(() => window.coreGame.view.zoom.baseRatio)
         const result = await page.evaluate(() => {
             const g = window.coreGame, view = g.view, rivals = g.world.rivals, bots = rivals.items, player = g.physicalVehicle
+            const spawnOnLand = !!g.navigation.sample(player.position.x, player.position.z)
             g.rendering.renderer.setAnimationLoop(null)
             g.ticker.delta = g.ticker.deltaAverage = 1 / 60
             g.ticker.deltaScaled = 1 / 60 * g.ticker.scale
@@ -85,6 +86,17 @@ const assert = require('node:assert/strict')
             let contacts = 0, invalid = false
             const minimumDistances = bots.map(() => Infinity)
             const states = new Set()
+            // Rivals now spawn anywhere on the island. Record that, then stage
+            // them close by so this test still exercises pursuit and contacts.
+            const initialDistances = bots.map(bot => bot.vehicle.position.distanceTo(player.position))
+            bots.forEach((bot, index) => {
+                const angle = index * Math.PI * 2 / bots.length
+                const spot = player.position.clone()
+                spot.x += Math.cos(angle) * 12
+                spot.z += Math.sin(angle) * 12
+                bot.vehicle.moveTo(spot, angle)
+                bot.vehicle.activate()
+            })
             for(let i = 0; i < 1500; i++) {
                 step()
                 bots.forEach((bot, index) => {
@@ -104,10 +116,11 @@ const assert = require('node:assert/strict')
             for(let i = 0; i < 120; i++) view.update()
             for(const bot of bots) bot.visual.update()
             g.world.visualVehicle.update()
-            return { fixedCamera, followsCar, radius, contacts, minimumDistances, states: [...states], invalid, paused, resumed, colors: bots.map(bot => bot.color), distinctPaints: new Set([g.world.visualVehicle, ...bots.map(bot => bot.visual)].map(visual => visual.parts.bodyPainted.material.uuid)).size, noHighrise: !g.world.level && !g.resources.campTower, parameters: [player.steeringAmplitude, player.engineForceAmplitude, player.topSpeed, player.topSpeedBoost], map: !!g.world.floor && !!g.world.waterSurface }
+            return { fixedCamera, followsCar, radius, contacts, minimumDistances, initialDistances, states: [...states], invalid, paused, resumed, colors: bots.map(bot => bot.color), distinctPaints: new Set([g.world.visualVehicle, ...bots.map(bot => bot.visual)].map(visual => visual.parts.bodyPainted.material.uuid)).size, noHighrise: !g.world.level && !g.resources.campTower, parameters: [player.steeringAmplitude, player.engineForceAmplitude, player.topSpeed, player.topSpeedBoost], map: !!g.world.floor && !!g.world.waterSurface, spawnOnLand }
         })
         console.log(JSON.stringify({ wheelRatio, ...result }, null, 2))
-        assert.ok(result.fixedCamera && result.followsCar && result.noHighrise && result.map)
+        assert.ok(result.fixedCamera && result.followsCar && result.noHighrise && result.map && result.spawnOnLand)
+        assert.ok(result.initialDistances.every(distance => distance > 30), 'Rivals must not spawn next to the player')
         assert.ok(result.contacts > 0 && result.minimumDistances.some(distance => distance < 6))
         assert.ok(!result.invalid && result.paused && result.resumed)
         assert.equal(result.distinctPaints, 4)

@@ -44,7 +44,6 @@ export class View
     setFocusPoint()
     {
         const defaultRespawn = this.game.respawns.getDefault()
-        
         this.focusPoint = {}
         this.focusPoint.trackedPosition = new THREE.Vector3(defaultRespawn.position.x, 0, defaultRespawn.position.z)
         this.focusPoint.isTracking = true
@@ -331,6 +330,16 @@ export class View
         }
     }
 
+
+    recenter(position)
+    {
+        if(!this.focusPoint)
+            return
+
+        this.focusPoint.trackedPosition.set(position.x, 0, position.z)
+        this.focusPoint.position.copy(this.focusPoint.trackedPosition)
+        this.focusPoint.smoothedPosition.copy(this.focusPoint.trackedPosition)
+    }
 
     resize()
     {

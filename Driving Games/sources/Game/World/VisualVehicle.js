@@ -7,6 +7,7 @@ import { cameraPosition, color, Fn, min, mix, normalWorld, positionViewDirection
 import { clamp } from 'three/src/math/MathUtils.js'
 import gsap from 'gsap'
 import { MeshDefaultMaterial } from '../Materials/MeshDefaultMaterial.js'
+import { PAINTS } from '../Config.js'
 
 export class VisualVehicle
 {
@@ -143,7 +144,13 @@ export class VisualVehicle
         this.paints = {}
 
         this.paints.choices = {}
-        this.paints.choices.red = this.game.materials.getFromName('redGradient')
+        for(const paint of PAINTS)
+        {
+            this.paints.choices[paint.name] = paint.name === 'red'
+                ? (this.game.materials.getFromName('redGradient') ?? this.game.materials.createGradient('paint-red', paint.top, paint.bottom))
+                : this.game.materials.createGradient(`paint-${paint.name}`, paint.top, paint.bottom)
+        }
+
         this.paints.changeTo = (name = 'red') =>
         {
             const material = this.paints.choices[name]
@@ -160,12 +167,14 @@ export class VisualVehicle
             }
         }
         
-        // From achievemnts
-        this.paints.changeTo(this.game.achievements.rewards.current.name)
+        // The selected paint wins; achievement rewards only remap when they
+        // happen to be one of the setup colours.
+        this.paints.changeTo(this.game.config?.paint ?? 'red')
 
         this.game.achievements.events.on('rewardActiveChange', (reward) =>
         {
-            this.paints.changeTo(reward.name)
+            if(this.paints.choices[reward.name])
+                this.paints.changeTo(reward.name)
         })
     }
 

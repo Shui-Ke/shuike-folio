@@ -99,7 +99,7 @@ export class Fireballs
 
         // Trigger explosion
         if((options.strength ?? 8) > 0)
-            this.game.explosions.explode(coordinates, explosionRadius, options.strength ?? 8, false, 3, options.recoveryDelay ?? false)
+            this.game.explosions.explode(coordinates, explosionRadius, options.strength ?? 8, false, 3, options.recoveryDelay ?? false, options.owner ?? null)
 
         // Dispose
         gsap.delayedCall(2.25, () =>

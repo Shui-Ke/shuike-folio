@@ -43,6 +43,12 @@ export class Reveal
         this.game.ticker.events.on('tick', this.update, 10)
     }
 
+    recenter(position)
+    {
+        this.position.copy(position)
+        this.position2Uniform.value.set(position.x, position.z)
+    }
+
     updateStep(step)
     {
         const speedMultiplier = location.hash.match(/skip/i) ? 4 : 1
@@ -72,19 +78,45 @@ export class Reveal
                 // Intro loader => Show label and sound button
                 this.game.world.intro.setText()
                 this.game.world.intro.setSoundButton()
-                this.game.ticker.wait(1, () =>
-                {
-                    this.game.world.intro.showLabel()
-                })
 
                 // Cherry trees
                 if(this.game.world.cherryTrees)
                     this.game.world.cherryTrees.leaves.seeThroughMultiplier = 0.5
 
+                const setup = !this.game.config.skipSetup
+
+                // The 3D "click to start" prompt is replaced by the setup panel.
+                if(!setup)
+                {
+                    this.game.ticker.wait(1, () =>
+                    {
+                        this.game.world.intro.showLabel()
+                    })
+                }
+
                 // Click
-                if(location.hash.match(/skip/i))
+                if(!setup && location.hash.match(/skip/i))
                 {
                     this.updateStep(1)
+                }
+                else if(setup)
+                {
+                    // Keyboard / gamepad can confirm the panel too. Enter stays
+                    // native so it can also activate the focused option.
+                    this.game.inputs.addActions([
+                        { name: 'introStart', categories: [ 'intro' ], keys: [ 'Gamepad.cross' ] },
+                    ])
+                    const confirm = () => this.game.setupScreen.confirm()
+                    this.game.inputs.events.on('introStart', confirm)
+
+                    this.game.setupScreen.open(values =>
+                    {
+                        this.game.inputs.events.off('introStart', confirm)
+                        this.game.config.apply(values)
+                        // The player car already exists, so repaint it with the pick.
+                        this.game.world.visualVehicle?.paints?.changeTo(values.paint)
+                        this.updateStep(1)
+                    })
                 }
                 else
                 {
@@ -133,6 +165,9 @@ export class Reveal
         }
         else if(step === 1)
         {
+            // The life budget follows the difficulty picked in the setup panel.
+            this.game.match?.reset()
+
             // Audio
             this.game.audio.init()
             this.sound.play()

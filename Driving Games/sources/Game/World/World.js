@@ -51,7 +51,7 @@ export class World
         else if(step === 1)
         {
             // VisualVehicle extracts pieces from the GLTF; keep an intact template first.
-            const rivalModel = new URLSearchParams(location.search).get('bots') !== '0'
+            const rivalModel = this.game.config.bots > 0
                 ? this.game.resources.vehicle.scene.clone(true) : null
             this.visualVehicle = new VisualVehicle(this.game.resources.vehicle.scene)
             if(rivalModel) this.rivals = new RivalVehicles(rivalModel)

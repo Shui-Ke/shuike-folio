@@ -243,13 +243,20 @@ export class Player
         // Respawn
         this.game.inputs.events.on('respawn', (action) =>
         {
-            if(this.state !== Player.STATE_DEFAULT && this.state !== Player.STATE_DESTROYED)
+            if(!action.active || this.game.match?.ended)
                 return
 
-            if(action.active)
+            // A wrecked car can only come back through the match lives system.
+            if(this.state === Player.STATE_DESTROYED)
             {
-                this.respawn()
+                this.game.match?.revive()
+                return
             }
+
+            if(this.state !== Player.STATE_DEFAULT)
+                return
+
+            this.respawn()
         })
 
         // Honk
@@ -458,7 +465,7 @@ export class Player
 
     respawn(respawnName = null, callback = null)
     {
-        if(this.respawning) return
+        if(this.respawning || this.game.match?.ended) return
         this.respawning = true
         this.state = Player.STATE_LOCKED
         this.game.overlay.show(() =>

@@ -25,7 +25,7 @@ export class Powerups
         this.nextRefreshAt = 30
         this.started = false
         this.previousPositions = new Map()
-        this.navigation = new VehicleNavigation(this.game)
+        this.navigation = this.game.navigation ?? new VehicleNavigation(this.game)
         this.hud = document.createElement('div')
         this.hud.className = 'upgrade-hud'
         this.hud.innerHTML = '<span data-stat="power"></span><span data-stat="speed"></span><span data-stat="jump"></span><small data-stat="velocity"></small>'
@@ -62,7 +62,14 @@ export class Powerups
 
     start()
     {
-        const positions = this.randomPositions(TYPES.length * 5)
+        const perType = this.game.config?.items ?? 5
+        if(perType <= 0)
+        {
+            this.started = true
+            return
+        }
+
+        const positions = this.randomPositions(TYPES.length * perType)
         positions.forEach((position, index) =>
         {
             const typeIndex = index % TYPES.length, definition = TYPES[typeIndex]
@@ -87,10 +94,12 @@ export class Powerups
 
     randomPositions(count)
     {
-        const positions = [], half = this.navigation.halfSize
+        const positions = [], random = this.game.config?.random ?? Math.random
+        // Keep pickups on the authored island instead of the open ocean ring.
+        const bound = this.game.water.ocean.start * 0.97
         const vehicles = [...this.game.world.vehicleDamage.records.keys()].filter(v => !v.destroyed)
-        for(let attempt = 0; attempt < 6000 && positions.length < count; attempt++) {
-            const x = (Math.random() * 2 - 1) * half, z = (Math.random() * 2 - 1) * half
+        for(let attempt = 0; attempt < 9000 && positions.length < count; attempt++) {
+            const x = (random() * 2 - 1) * bound, z = (random() * 2 - 1) * bound
             if(vehicles.some(v => Math.hypot(v.position.x - x, v.position.z - z) < 5)) continue
             if(positions.some(p => Math.hypot(p.x - x, p.z - z) < 5.5)) continue
             const position = this.navigation.sample(x, z)
@@ -135,12 +144,16 @@ export class Powerups
         this.nextRefreshAt = this.clock + this.refreshInterval
     }
 
-    nearestFor(vehicle)
+    nearestFor(vehicle, options = {})
     {
-        let nearest = null, best = 24 * 24
+        const range = options.range ?? 24
+        let nearest = null, best = range * range
         for(const item of this.items)
         {
             if(!item.active || !this.canCollect(item, vehicle)) continue
+            if(options.upgradesOnly && item.consumable) continue
+            // A maxed upgrade would only waste the trip.
+            if(!item.consumable && !vehicle.upgrades.canCollect(item.type)) continue
             const distance = vehicle.position.distanceToSquared(item.position)
             if(distance < best) { best = distance; nearest = item }
         }

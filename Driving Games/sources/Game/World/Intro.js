@@ -23,8 +23,16 @@ export class Intro
     setLabel()
     {
         this.label = new THREE.Group()
-        this.label.position.copy(this.center)
         this.label.rotation.reorder('YXZ')
+        this.positionLabel()
+
+        this.label.scale.setScalar(0.01)
+        this.game.scene.add(this.label)
+    }
+
+    positionLabel()
+    {
+        this.label.position.copy(this.center)
         
         if(this.game.quality.level === 0)
         {
@@ -43,9 +51,13 @@ export class Intro
             this.label.rotation.y = 0.4
             this.label.rotation.x = -0.4
         }
-        
-        this.label.scale.setScalar(0.01)
-        this.game.scene.add(this.label)
+    }
+
+    recenter(position)
+    {
+        this.center.copy(position)
+        this.circle.mesh.position.set(position.x, 0.001, position.z)
+        this.positionLabel()
     }
 
     setCircle()

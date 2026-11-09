@@ -12,8 +12,11 @@ export class Explosions
         this.events = new Events()
     }
 
-    explode(coordinates, radius = 7, strength = 4, vehicleOnly = false, bulletTimeStrengthThreshold = 3, recoveryDelay = false)
+    explode(coordinates, radius = 7, strength = 4, vehicleOnly = false, bulletTimeStrengthThreshold = 3, recoveryDelay = false, owner = null)
     {
+        // Momentum cue for hard rivals: any real blast can start a follow-up.
+        this.events.trigger('explode', [new THREE.Vector3().copy(coordinates), radius, strength])
+
         const hitKey = `explosion:${this.explosionSerial = (this.explosionSerial ?? 0) + 1}`
         // View roll
         const distance = this.game.view.focusPoint.position.distanceTo(coordinates)
@@ -46,6 +49,7 @@ export class Explosions
             if(fadedStrength > 0)
             {
                 const vehicle = physicalObject.body.userData?.vehicle
+                if(vehicle && owner && this.game.world.rivals?.isFriendlyPair?.(owner, vehicle)) return false
                 if(vehicle && this.game.world.items?.absorb(vehicle, hitKey)) return false
                 // const point = direction.negate().setLength(0).add(position)
                 const point = position
