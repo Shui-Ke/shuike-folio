@@ -21,6 +21,8 @@ export class Powerups
         this.game = Game.getInstance()
         this.items = []
         this.clock = 0
+        this.refreshInterval = 30
+        this.nextRefreshAt = 30
         this.started = false
         this.previousPositions = new Map()
         this.navigation = new VehicleNavigation(this.game)
@@ -60,42 +62,77 @@ export class Powerups
 
     start()
     {
-        const spawn = this.game.respawns.getDefault().position
-        const origin = this.navigation.nearest(spawn)?.position ?? spawn
-        const positions = []
-        const count = TYPES.length * 5
-        for(const radius of [8, 14, 21, 29, 38, 48, 58, 68, 78])
-        {
-            for(let i = 0; i < 48 && positions.length < count; i++)
-            {
-                const angle = i * Math.PI * 2 / 48 + radius * 0.1
-                const x = spawn.x + Math.cos(angle) * radius, z = spawn.z + Math.sin(angle) * radius
-                if(Math.max(Math.abs(x), Math.abs(z)) > 67) continue
-                const position = this.navigation.sample(x, z)
-                if(!position || positions.some(other => other.distanceTo(position) < 5.5)) continue
-                if(!this.navigation.clearLine(origin, position) && !this.navigation.path(origin, position, false).length) continue
-                positions.push(position)
-            }
-            if(positions.length >= count) break
-        }
+        const positions = this.randomPositions(TYPES.length * 5)
         positions.forEach((position, index) =>
         {
             const typeIndex = index % TYPES.length, definition = TYPES[typeIndex]
             const group = new THREE.Group()
             const model = this.templates[typeIndex].clone(true)
-            model.scale.setScalar(0.57)
+            model.scale.setScalar(0.91)
             model.rotation.y = Math.PI / 4
             group.add(model)
             const halo = new THREE.Mesh(new THREE.RingGeometry(0.72, 0.82, 24), new THREE.MeshBasicNodeMaterial({ color: definition.color, transparent: true, opacity: 0.5, depthWrite: false }))
             halo.rotation.x = -Math.PI / 2
             halo.position.y = 0.04
             group.add(halo)
+            const stars = this.createStars(definition.color)
+            group.add(stars)
             group.position.copy(position)
             group.name = `pickup-${definition.type}-${index}`
             this.game.scene.add(group)
-            this.items.push({ id: index, ...definition, position, group, model, active: true, respawnAt: 0 })
+            this.items.push({ id: index, ...definition, position, group, model, halo, stars, active: true, respawnAt: 0 })
         })
         this.started = true
+    }
+
+    randomPositions(count)
+    {
+        const positions = [], half = this.navigation.halfSize
+        const vehicles = [...this.game.world.vehicleDamage.records.keys()].filter(v => !v.destroyed)
+        for(let attempt = 0; attempt < 6000 && positions.length < count; attempt++) {
+            const x = (Math.random() * 2 - 1) * half, z = (Math.random() * 2 - 1) * half
+            if(vehicles.some(v => Math.hypot(v.position.x - x, v.position.z - z) < 5)) continue
+            if(positions.some(p => Math.hypot(p.x - x, p.z - z) < 5.5)) continue
+            const position = this.navigation.sample(x, z)
+            if(position) positions.push(position)
+        }
+        return positions
+    }
+
+    createStars(tint)
+    {
+        if(!this.starGeometry) {
+            const vertices = []
+            for(let i = 0; i < 8; i++) {
+                const angle = i * Math.PI / 4, c = Math.cos(angle), s = Math.sin(angle)
+                const next = (i + 1) * Math.PI / 4
+                const radius = i % 2 ? 0.2 : 1, nextRadius = i % 2 ? 1 : 0.2
+                vertices.push(0, 0, 0, c * radius, s * radius, 0, Math.cos(next) * nextRadius, Math.sin(next) * nextRadius, 0)
+            }
+            this.starGeometry = new THREE.BufferGeometry()
+            this.starGeometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3))
+        }
+        const stars = new THREE.Group()
+        stars.name = 'pickup-twinkling-stars'
+        for(let i = 0; i < 6; i++) {
+            const material = new THREE.MeshBasicNodeMaterial({ color: new THREE.Color(tint).lerp(new THREE.Color('#ffffff'), 0.7), transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending })
+            const star = new THREE.Mesh(this.starGeometry, material)
+            star.userData = { angle: i * Math.PI / 3, radius: 0.95 + i % 2 * 0.4, height: 0.7 + i % 3 * 0.55 }
+            stars.add(star)
+        }
+        return stars
+    }
+
+    refresh()
+    {
+        const positions = this.randomPositions(this.items.length)
+        this.items.forEach((item, index) => {
+            if(!positions[index]) return
+            item.position.copy(positions[index]); item.group.position.copy(item.position)
+            item.active = true; item.group.visible = true; item.respawnAt = 0
+        })
+        this.previousPositions.clear()
+        this.nextRefreshAt = this.clock + this.refreshInterval
     }
 
     nearestFor(vehicle)
@@ -113,15 +150,16 @@ export class Powerups
     collect(item, vehicle)
     {
         if(!item.active || vehicle.destroyed || !vehicle.chassis.physical.body.isEnabled()) return false
-        const collected = item.consumable ? this.game.world.items.collect(vehicle, item.type) : vehicle.upgrades.collect(item.type)
+        const maxed = !item.consumable && !vehicle.upgrades.canCollect(item.type)
+        const collected = item.consumable ? this.game.world.items.collect(vehicle, item.type) : (maxed || vehicle.upgrades.collect(item.type))
         if(!collected) return false
         item.active = false
         item.group.visible = false
-        item.respawnAt = this.clock + 12
+        item.respawnAt = this.nextRefreshAt
         if(vehicle === this.game.physicalVehicle)
         {
             const stats = vehicle.upgrades
-            const message = item.consumable ? `${item.title} +1 · 按 E 使用` : item.type === 'power' ? `POWER+ ${stats.power}/5 · 撞击 ×${stats.powerMultiplier}` :
+            const message = maxed ? `${item.title} 已拾取 · 已满级，属性不变` : item.consumable ? `${item.title} +1 · 按 E 使用` : item.type === 'power' ? `POWER+ ${stats.power}/5 · 撞击 ×${stats.powerMultiplier}` :
                 item.type === 'speed' ? `SPEED+ ${stats.speed}/2 · 速度 ×${stats.speedMultiplier}` : 'JUMP×2 · 再按一次空格可二段跳'
             this.toast.textContent = message
             this.toast.style.color = item.color
@@ -132,7 +170,7 @@ export class Powerups
     }
 
     templateFor(type) { return this.templates?.[TYPES.findIndex(item => item.type === type)] }
-    canCollect(item, vehicle) { return item.consumable ? this.game.world.items.canCollect(vehicle, item.type) : vehicle.upgrades.canCollect(item.type) }
+    canCollect(item, vehicle) { return item.consumable ? this.game.world.items.canCollect(vehicle, item.type) : true }
 
     updateHud()
     {
@@ -154,12 +192,23 @@ export class Powerups
         if(!this.templates || this.game.reveal.step !== 2 || this.game.editorPaused || this.game.escMenu?.isOpen || this.game.player.state !== 1) return
         if(!this.started) this.start()
         this.clock += this.game.ticker.delta
+        if(this.clock >= this.nextRefreshAt) this.refresh()
         const vehicles = [...this.game.world.vehicleDamage.records.keys()].filter(vehicle => !vehicle.destroyed && vehicle.chassis.physical.body.isEnabled())
         for(const item of this.items)
         {
-            if(!item.active && this.clock >= item.respawnAt) { item.active = true; item.group.visible = true }
+            const pulse = 0.5 + 0.5 * Math.sin(this.clock * Math.PI * 2 + item.id * 0.7)
+            item.stars.children.forEach((star, index) => {
+                const phase = this.clock * 3.5 + index * 1.7 + item.id
+                const sparkle = Math.pow(0.5 + 0.5 * Math.sin(phase), 3)
+                const angle = star.userData.angle + this.clock * 0.18
+                star.position.set(Math.cos(angle) * star.userData.radius, star.userData.height + Math.sin(phase * 0.5) * 0.12, Math.sin(angle) * star.userData.radius)
+                star.quaternion.copy(this.game.view.camera.quaternion)
+                star.scale.setScalar(0.08 + sparkle * 0.24)
+                star.material.opacity = sparkle * 0.95
+            })
+            item.halo.material.opacity = 0.25 + pulse * 0.15
             item.model.position.y = 0.6 + Math.sin(this.clock * 2 + item.id) * 0.13
-            item.model.rotation.y = Math.PI / 4 + Math.sin(this.clock * 0.7 + item.id) * 0.18
+            item.model.rotation.y = Math.PI / 4 + Math.sin(this.clock * 0.77 + item.id) * 0.18
             if(!item.active) continue
             let collector = null, closest = 1.8 * 1.8
             for(const vehicle of vehicles)

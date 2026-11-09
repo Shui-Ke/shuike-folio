@@ -11,6 +11,7 @@ import { Player } from './Player.js'
 import { View } from './View.js'
 import { Viewport } from './Viewport.js'
 import { World } from './World/World.js'
+import { MapExpansion } from './World/MapExpansion.js'
 import { Tracks } from './Tracks.js'
 // import { Monitoring } from './Monitoring.js'
 import { Lighting } from './Ligthing.js'
@@ -167,6 +168,7 @@ export class Game
         this.RAPIER = RAPIER
         this.resources = { ...newResources, ...this.resources }
 
+        MapExpansion.prepare(this)
         this.terrain = new Terrain()
         this.physics = new Physics()
         this.wireframe = new PhysicsWireframe()

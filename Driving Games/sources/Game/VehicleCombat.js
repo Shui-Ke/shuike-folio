@@ -15,7 +15,8 @@ export class VehicleCombat
         this.hitCount = 0
         this.effectCount = 0
         this.effectCooldown = 0
-        this.impactThreshold = 5
+        this.impactThreshold = 4
+        this.maxImpactStrength = 30
         this.flights = []
         this.framing = { blend: 0, focus: new THREE.Vector3(), distance: 0 }
         this.game.ticker.events.on('tick', () => this.updateFlights(), 6)
@@ -50,8 +51,12 @@ export class VehicleCombat
             const a = vehicles[i], b = vehicles[j]
             const key = [a.chassis.physical.body.handle, b.chassis.physical.body.handle].sort((a, b) => a - b).join(':')
             const points = []
-            for(const ca of a.chassis.physical.colliders)
-            for(const cb of b.chassis.physical.colliders)
+            const colliders = vehicle => {
+                const shield = this.game.world.items?.state(vehicle).shield?.collider
+                return shield ? [...vehicle.chassis.physical.colliders, shield] : vehicle.chassis.physical.colliders
+            }
+            for(const ca of colliders(a))
+            for(const cb of colliders(b))
                 this.game.physics.world.contactPair(ca, cb, manifold =>
                 {
                     for(let k = 0; k < manifold.numSolverContacts(); k++) points.push(manifold.solverContactPoint(k))
@@ -72,13 +77,15 @@ export class VehicleCombat
         const a = this.before.get(attacker), b = this.before.get(target)
         const toward = b.position.clone().sub(a.position).setY(0).normalize()
         const forwardSpeed = a.velocity.dot(a.forward)
+        const direction = a.forward.clone().multiplyScalar(forwardSpeed < 0 ? -1 : 1)
+        const impactSpeed = Math.abs(forwardSpeed)
         const closingSpeed = a.velocity.clone().sub(b.velocity).dot(toward)
-        if(attacker.launch?.active || forwardSpeed < 0.8 || closingSpeed < 0.7 || a.forward.dot(toward) < 0.55) return null
-        const point = points.find(point => new THREE.Vector3().copy(point).sub(a.position).dot(a.forward) > 0.8)
+        if(attacker.launch?.active || impactSpeed < 0.8 || closingSpeed < 0.7 || direction.dot(toward) < 0.55) return null
+        const point = points.find(point => new THREE.Vector3().copy(point).sub(a.position).dot(direction) > 0.8)
         if(!point) return null
-        const speed = speedWhiteValue(forwardSpeed, attacker.upgrades.speedMultiplier, attacker.drivingSpeedRange.normal, attacker.drivingSpeedRange.boost)
+        const speed = speedWhiteValue(impactSpeed, attacker.upgrades.speedMultiplier, attacker.drivingSpeedRange.normal, attacker.drivingSpeedRange.boost)
         const power = attacker.upgrades.powerMultiplier
-        return { attacker, target, point: new THREE.Vector3().copy(point), direction: a.forward, power, speed,
+        return { attacker, target, point: new THREE.Vector3().copy(point), direction, end: forwardSpeed < 0 ? 'rear' : 'front', power, speed,
             strength: power * speed, bonusSpeed: (power - 1) * speed * 0.9,
             heavyImpact: power * speed >= this.impactThreshold }
     }
@@ -108,9 +115,10 @@ export class VehicleCombat
     {
         const { target, attacker } = hit
         const body = target.chassis.physical.body
-        // Buffs raise the score; the gate and heavy-impact tier stay fixed.
-        const range = 50
-        const height = 12
+        // Full POWER at base boost reaches the existing maximum trajectory.
+        const ratio = THREE.MathUtils.clamp(hit.strength / this.maxImpactStrength, 0, 1)
+        const range = 50 * ratio
+        const height = Math.max(3, 12 * ratio)
         const gravity = Math.abs(this.game.physics.world.gravity.y)
         const upSpeed = Math.sqrt(2 * gravity * height)
         const duration = 2 * upSpeed / gravity

@@ -1,5 +1,6 @@
 import * as THREE from 'three/webgpu'
 import { Game } from './Game.js'
+import { MAP_SCALE } from './WorldLayout.js'
 
 export class Respawns
 {
@@ -20,6 +21,7 @@ export class Respawns
             rotation: 0
         })
 
+        for(const item of this.items.values()) { item.position.x *= MAP_SCALE; item.position.z *= MAP_SCALE }
         const requestedSpawn = new URLSearchParams(location.search).get('spawn')
         if(requestedSpawn && this.items.has(requestedSpawn))
             this.defaultName = requestedSpawn

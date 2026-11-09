@@ -1,6 +1,7 @@
 import * as THREE from 'three/webgpu'
 import { Game } from '../Game.js'
 import { Trees } from './Trees.js'
+import { MAP_SCALE } from '../WorldLayout.js'
 
 const CAMP_CENTER = { x: 31.3, z: 70.4 }
 const CAMP_OFFSET = { x: -14, z: -72 }
@@ -48,7 +49,7 @@ export class CanyonCamp
         const references = game.resources.cherryTreesReferencesModel.scene
         for(const child of [...references.children])
         {
-            if(Math.hypot(child.position.x - CAMP_CENTER.x, child.position.z - CAMP_CENTER.z) < 7)
+            if(Math.hypot(child.position.x - CAMP_CENTER.x * MAP_SCALE, child.position.z - CAMP_CENTER.z * MAP_SCALE) < 7)
                 references.remove(child)
         }
     }
@@ -70,7 +71,7 @@ export class CanyonCamp
         for(const item of PROPS)
             this.addProp(item)
 
-        this.campCenter = new THREE.Vector3(CAMP_CENTER.x, 0, CAMP_CENTER.z)
+        this.campCenter = new THREE.Vector3(CAMP_CENTER.x * MAP_SCALE, 0, CAMP_CENTER.z * MAP_SCALE)
     }
 
     groundHeight(x, z)
@@ -87,8 +88,8 @@ export class CanyonCamp
 
         for(const item of TREES)
         {
-            const x = item.position[0] + (item.camp ? CAMP_OFFSET.x : 0)
-            const z = item.position[2] + (item.camp ? CAMP_OFFSET.z : 0)
+            const x = (item.position[0] + (item.camp ? CAMP_OFFSET.x : 0)) * MAP_SCALE
+            const z = (item.position[2] + (item.camp ? CAMP_OFFSET.z : 0)) * MAP_SCALE
             const y = item.camp ? this.groundHeight(x, z) : item.position[1]
 
             const reference = new THREE.Object3D()
@@ -120,9 +121,9 @@ export class CanyonCamp
 
     addProp(item)
     {
-        const x = item.position[0]
+        const x = item.position[0] * MAP_SCALE
         const y = item.position[1]
-        const z = item.position[2]
+        const z = item.position[2] * MAP_SCALE
 
         const root = this.createVisual(item.resource)
         const bounds = new THREE.Box3().setFromObject(root)

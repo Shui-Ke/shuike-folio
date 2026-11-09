@@ -82,7 +82,7 @@ export class Floor
             const uvDim = min(min(uv().x, uv().y).mul(20), 1)
 
             const newPosition = positionLocal
-            const floorHeight = this.game.water.oceanHeightNode(positionWorld.xz, terrainData.b.mul(-1.5))
+            const floorHeight = this.game.terrain.heightNode(positionWorld.xz)
             newPosition.y.addAssign(floorHeight.mul(uvDim))
 
             return newPosition

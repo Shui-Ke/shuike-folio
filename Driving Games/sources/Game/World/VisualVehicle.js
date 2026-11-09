@@ -107,6 +107,7 @@ export class VisualVehicle
 
         // Chassis
         this.parts.chassis.rotation.reorder('YXZ')
+        this.parts.chassis.scale.multiplyScalar(this.physicalVehicle.scale)
         this.game.materials.updateObject(this.parts.chassis)
         this.game.scene.add(this.parts.chassis)
 
@@ -206,7 +207,7 @@ export class VisualVehicle
                 wheel.container.rotation.y = Math.PI
 
             // Add new track
-            wheel.groundTrack = this.game.tracks.add(new Track(0.5, 'r'))
+            wheel.groundTrack = this.game.tracks.add(new Track(0.5 * this.physicalVehicle.scale, 'r'))
 
             this.wheels.items.push(wheel)
         }
@@ -285,6 +286,7 @@ export class VisualVehicle
         this.antenna.target = new THREE.Vector3(0, 2, 0)
         this.antenna.object = this.parts.antenna
         this.antenna.head = this.model.getObjectByName('antennaHead')
+        this.antenna.head.scale.multiplyScalar(this.physicalVehicle.scale)
         this.antenna.headAxle = this.antenna.head.children[0]
         this.antenna.headReference = this.antenna.object.getObjectByName('antennaHeadReference')
 
@@ -383,11 +385,11 @@ export class VisualVehicle
   
             const suspensionLength = physicalWheel.suspensionLength
             let wheelY = physicalWheel.basePosition.y - suspensionLength
-            wheelY = Math.min(wheelY, -0.5)
+            wheelY = Math.min(wheelY, -0.5 * physicalVehicle.scale) / physicalVehicle.scale
 
-            visualWheel.container.position.x = physicalWheel.basePosition.x
+            visualWheel.container.position.x = physicalWheel.basePosition.x / physicalVehicle.scale
             visualWheel.container.position.y += (wheelY - visualWheel.container.position.y) * 25 * this.game.ticker.deltaScaled
-            visualWheel.container.position.z = physicalWheel.basePosition.z
+            visualWheel.container.position.z = physicalWheel.basePosition.z / physicalVehicle.scale
 
             if(visualWheel.suspension)
             {

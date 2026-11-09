@@ -249,7 +249,7 @@ export class WaterSurface
                 // Terrain data
                 // const terrainUv = this.game.terrain.worldPositionToUvNode(positionWorld.xz)
                 const terrainData = this.game.terrain.terrainNode(positionWorld.xz)
-                const floorHeight = this.game.water.oceanHeightNode(positionWorld.xz, terrainData.b.mul(-1.5))
+                const floorHeight = this.game.terrain.heightNode(positionWorld.xz)
                 const waterDepth = this.game.water.surfaceElevationUniform.sub(floorHeight)
                 // Never paint foam on the dry side of the mathematical shoreline.
                 // Coarse floor triangles used to expose large white wedges there.

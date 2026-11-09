@@ -1,5 +1,6 @@
 import * as THREE from 'three/webgpu'
 import { Game } from './Game.js'
+import { MAP_SIZE } from './WorldLayout.js'
 import MeshGridMaterial, { MeshGridMaterialLine } from './Materials/MeshGridMaterial.js'
 import { color, Fn, mix, round, smoothstep, texture, uniform, uv, vec2 } from 'three/tsl'
 
@@ -10,7 +11,7 @@ export class Terrain
         this.game = Game.getInstance()
 
         this.subdivision = 128
-        this.size = 192
+        this.size = MAP_SIZE
 
         if(this.game.debug.active)
         {
@@ -87,13 +88,21 @@ export class Terrain
 
         const worldPositionToUvNode = Fn(([position]) =>
         {
-            return position.div(this.subdivision).div(1.5).add(0.5)
+            return position.div(this.size).add(0.5)
+        })
+
+        this.heightNode = Fn(([position]) => {
+            const source = texture(this.game.resources.terrainTexture, worldPositionToUvNode(position))
+            return this.game.water.oceanHeightNode(position, source.b.mul(-1.5))
         })
 
         this.terrainNode = Fn(([position]) =>
         {
             const textureUv = worldPositionToUvNode(position)
             const data = texture(this.game.resources.terrainTexture, textureUv)
+            const height = this.heightNode(position)
+            data.b.assign(height.div(-1.5).clamp(0, 1))
+            data.g.mulAssign(height.smoothstep(-0.25, -0.08))
 
             // Wheel tracks
             const groundDataColor = texture(

@@ -186,6 +186,7 @@ export class Materials
         const material = new MeshDefaultMaterial({
             colorNode: baseColor
         })
+        material.userData.mainColor = colorA.value
         // material.shadowSide = THREE.BackSide
         
         this.save(_name, material)

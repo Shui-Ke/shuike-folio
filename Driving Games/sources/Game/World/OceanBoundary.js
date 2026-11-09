@@ -58,8 +58,8 @@ export class OceanBoundary
             const t = (level - a.y) / (b.y - a.y)
             return { x: THREE.MathUtils.lerp(a.x, b.x, t), z: THREE.MathUtils.lerp(a.z, b.z, t) }
         }
-        // March the actual seabed heightfield. Inland water is too shallow to
-        // reach this level, so only the outer deep sea gets warning bands.
+        // Trace the actual seabed: the outer deep sea and the lake's deep
+        // center both get warning bands, while shallow streams stay clear.
         for(let x = 0; x < rowsCount - 1; x++)
         {
             for(let z = 0; z < rowsCount - 1; z++)

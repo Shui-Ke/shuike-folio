@@ -34,7 +34,7 @@ export class VehicleDamage
         const bodyPoints = []
         for(const x of [bounds.min.x, bounds.max.x])
             for(const y of [bounds.min.y, bounds.max.y])
-                for(const z of [bounds.min.z, bounds.max.z]) bodyPoints.push(new THREE.Vector3(x, y, z))
+                for(const z of [bounds.min.z, bounds.max.z]) bodyPoints.push(new THREE.Vector3(x, y, z).multiplyScalar(vehicle.scale))
         const record = { vehicle, visual, isPlayer, bodyPoints, debris: [], destroyedCount: 0 }
         this.records.set(vehicle, record)
         vehicle.chassis.physical.autoReset = false

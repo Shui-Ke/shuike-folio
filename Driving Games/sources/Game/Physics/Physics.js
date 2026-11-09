@@ -175,7 +175,7 @@ export class Physics
             if(typeof _colliderDescription.mass !== 'undefined') // From collider description
             {
                 if(typeof _colliderDescription.centerOfMass !== 'undefined')
-                    colliderDescription = colliderDescription.setMassProperties(_colliderDescription.mass, _colliderDescription.centerOfMass, { x: 1, y: 1, z: 1 }, new THREE.Quaternion().setFromAxisAngle(new THREE.Euler(0, 1, 0), - Math.PI * 0))
+                    colliderDescription = colliderDescription.setMassProperties(_colliderDescription.mass, _colliderDescription.centerOfMass, _colliderDescription.principalAngularInertia ?? { x: 1, y: 1, z: 1 }, new THREE.Quaternion().setFromAxisAngle(new THREE.Euler(0, 1, 0), - Math.PI * 0))
                 else
                     colliderDescription = colliderDescription.setMass(_colliderDescription.mass)
             }

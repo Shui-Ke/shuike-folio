@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu'
+import { VEHICLE_SCALE } from '../WorldLayout.js'
 
 // A small, lazily sampled driving grid. Only fixed obstacles enter the cache;
 // cars and movable props are handled by the vehicle physics and local probes.
@@ -10,7 +11,7 @@ export class VehicleNavigation
         this.spacing = 3
         this.cells = new Map()
         this.halfSize = (game.world.level?.terrain.size ?? game.terrain.size) / 2 - 3
-        this.clearance = new game.RAPIER.Cuboid(1.65, 0.55, 1.65)
+        this.clearance = new game.RAPIER.Cuboid(1.65 * VEHICLE_SCALE, 0.55 * VEHICLE_SCALE, 1.65 * VEHICLE_SCALE)
         this.identity = { x: 0, y: 0, z: 0, w: 1 }
         this.isGround = collider => collider.parent()?.isFixed() &&
             (collider.collisionGroups() >>> 16) === game.physics.groups.all
@@ -35,12 +36,12 @@ export class VehicleNavigation
         // Reject cliffs and steep slopes across the car's footprint.
         for(const [dx, dz] of [[1.7, 0], [-1.7, 0], [0, 1.7], [0, -1.7]])
         {
-            const h = this.groundAt(x + dx, z + dz)
+            const h = this.groundAt(x + dx * VEHICLE_SCALE, z + dz * VEHICLE_SCALE)
             if(h === null || Math.abs(h - y) > 1.05) return null
         }
         let blocked = false
         this.game.physics.world.intersectionsWithShape(
-            { x, y: y + 1.15, z }, this.identity, this.clearance,
+            { x, y: y + 1.15 * VEHICLE_SCALE, z }, this.identity, this.clearance,
             () => { blocked = true; return false },
             undefined, undefined, undefined, undefined, this.isObstacle
         )

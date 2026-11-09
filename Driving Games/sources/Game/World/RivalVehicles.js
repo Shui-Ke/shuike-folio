@@ -178,12 +178,12 @@ export class RivalVehicles
         if(bot.upsideTime > 1.5)
         {
             bot.state = 'recover'
-            if(this.time - bot.lastFlip > 2.5)
+            if(bot.upsideTime > 1.5 + vehicle.recoveryDelay && this.time - bot.lastFlip > 2.5 && (!vehicle.explosionRecovery.extra || vehicle.explosionRecovery.elapsed >= 2))
             {
                 vehicle.flip.jump()
                 bot.lastFlip = this.time
             }
-            if(bot.upsideTime > 7) this.respawn(bot)
+            if(bot.upsideTime > 7 + vehicle.recoveryDelay) this.respawn(bot)
             return
         }
 

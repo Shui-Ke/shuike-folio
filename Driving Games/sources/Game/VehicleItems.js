@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu'
 import { Fn, uv, float } from 'three/tsl'
 import { Game } from './Game.js'
 import { ITEM_TYPES } from './ItemDefinitions.js'
+import { MissileSmoke } from './World/MissileSmoke.js'
 
 export class VehicleItems
 {
@@ -11,6 +12,7 @@ export class VehicleItems
         this.states = new Map()
         this.entities = []
         this.pulses = []
+        this.smoke = new MissileSmoke()
         this.serial = 0
         this.clock = 0
         this.selected = 0
@@ -121,6 +123,11 @@ export class VehicleItems
         return this.vehicles().filter(other => other !== vehicle).sort((a, b) => a.position.distanceToSquared(vehicle.position) - b.position.distanceToSquared(vehicle.position))[0] ?? null
     }
 
+    vehicleColor(vehicle)
+    {
+        return this.game.world.vehicleDamage.records.get(vehicle)?.visual.parts.bodyPainted.material.userData.mainColor ?? '#ff3a3a'
+    }
+
     use(vehicle, type)
     {
         if(!this.running() || !this.alive(vehicle)) return false
@@ -143,7 +150,7 @@ export class VehicleItems
     place(vehicle, type)
     {
         const direction = vehicle.forward.clone().setY(0).normalize()
-        const position = vehicle.position.clone().addScaledVector(direction, -4)
+        const position = vehicle.position.clone().addScaledVector(direction, -4 * vehicle.scale)
         const ground = this.game.world.powerups.navigation.groundAt(position.x, position.z)
         if(ground === null || this.game.water.depthAt({ x: position.x, y: ground, z: position.z }) > 0.15 || vehicle.position.y - ground > 4) {
             this.notify(vehicle, '需要在陆地附近放置'); return false
@@ -156,8 +163,11 @@ export class VehicleItems
         const body = world.createRigidBody(R.RigidBodyDesc.fixed().setTranslation(position.x, position.y, position.z))
         const collider = world.createCollider(R.ColliderDesc.cuboid(0.85, type === 'crate' ? 0.65 : 0.4, 0.85).setSensor(true), body)
         mesh.position.copy(position); mesh.rotation.y = -Math.atan2(direction.z, direction.x)
+        const dropHeight = 2.2, dropDuration = 0.55
+        mesh.position.y += dropHeight
+        body.setEnabled(false)
         this.game.scene.add(mesh)
-        this.entities.push({ id: ++this.serial, type, owner: vehicle, mesh, position, body, collider, age: 0, lifetime: 60 })
+        this.entities.push({ id: ++this.serial, type, owner: vehicle, mesh, position, body, collider, age: 0, lifetime: 60, dropHeight, dropDuration, landed: false })
         return true
     }
 
@@ -167,17 +177,26 @@ export class VehicleItems
         if(!target) { this.notify(vehicle, '没有可追踪的车辆'); return false }
         const mesh = this.model('missile', 0.65)
         if(!mesh) return false
-        const position = vehicle.position.clone().add(new THREE.Vector3(0, 2.7, 0))
+        const position = vehicle.position.clone().add(new THREE.Vector3(0, 1.9 * vehicle.scale, 0))
+        const direction = vehicle.forward.clone().setY(0).normalize()
         mesh.position.copy(position)
+        mesh.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), direction)
         this.game.scene.add(mesh)
-        const direction = vehicle.forward.clone().setY(1.7).normalize()
-        this.entities.push({ id: ++this.serial, type: 'missile', owner: vehicle, target, mesh, position, direction, age: 0, lifetime: 14, tracking: true })
+        const marker = new THREE.Mesh(new THREE.RingGeometry(2.1 * target.scale, 2.22 * target.scale, 40, 1, 0, Math.PI * 1.6), new THREE.MeshBasicNodeMaterial({ color: this.vehicleColor(target), transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false }))
+        marker.rotation.x = -Math.PI / 2
+        marker.position.copy(target.position).add(new THREE.Vector3(0, -0.5, 0))
+        marker.name = 'missile-target-lock'; marker.renderOrder = 4
+        this.game.scene.add(marker)
+        const side = new THREE.Vector3(-target.forward.z, 0, target.forward.x)
+        const routeSide = position.clone().sub(target.position).dot(side) >= 0 ? 1 : -1
+        this.entities.push({ id: ++this.serial, type: 'missile', owner: vehicle, target, mesh, marker, exhaust: mesh.getObjectByName('exhaust-core'), position, direction, age: 0, speed: 2, acceleration: 5, lifetime: 14, tracking: true, pursuit: false, routeSide })
+        this.notify(vehicle, '导弹已锁定 · 同色圆环标记目标')
         return true
     }
 
     addShield(vehicle)
     {
-        const geometry = new THREE.CylinderGeometry(2.55, 2.55, 2.4, 64, 1, true)
+        const geometry = new THREE.CylinderGeometry(2.55 * vehicle.scale, 2.55 * vehicle.scale, 2.4 * vehicle.scale, 64, 1, true)
         const material = new THREE.MeshBasicNodeMaterial({ color: '#ffffff', transparent: true, side: THREE.DoubleSide, depthWrite: false })
         material.opacityNode = Fn(() => {
             const height = uv().y
@@ -192,7 +211,7 @@ export class VehicleItems
         this.game.scene.add(mesh)
         const { world, groups } = this.game.physics, R = this.game.RAPIER
         // Solid, massless shell: only vehicle bumpers hit it, not the terrain.
-        const collider = world.createCollider(R.ColliderDesc.cylinder(1, 2.55).setMass(0).setCollisionGroups((groups.object << 16) | groups.bumper), vehicle.chassis.physical.body)
+        const collider = world.createCollider(R.ColliderDesc.cylinder(vehicle.scale, 2.55 * vehicle.scale).setMass(0).setCollisionGroups((groups.object << 16) | groups.bumper), vehicle.chassis.physical.body)
         this.state(vehicle).shield = { charges: 3, collider, mesh, touching: new Set() }
         return true
     }
@@ -241,13 +260,21 @@ export class VehicleItems
                 this.game.physics.world.contactPair(shield.collider, collider, manifold => { if(manifold.numSolverContacts()) contact = true })
                 if(!contact) return
                 const key = `car:${other.chassis.physical.body.handle}`
+                const otherSnapshot = this.before.get(other)
+                const toward = new THREE.Vector3().copy(otherSnapshot?.position ?? other.position).sub(snapshot.position).setY(0).normalize()
+                const outgoing = toward.dot(snapshot.velocity)
+                const incoming = otherSnapshot ? -toward.dot(otherSnapshot.velocity) : 0
+                // Keep the shield owner's own motion. An active ram against a
+                // passive target is an attack, not a charge-consuming block.
+                this.blocked.add(vehicle)
+                if(outgoing > Math.max(0.7, incoming + 0.1)) return
                 if(this.absorb(vehicle, key)) { touching.add(key); this.blocked.add(vehicle) }
             })
             // Keep immunity through sustained chassis contact, even after the
             // third charge removes the outer shell. Separation ends this hit.
             for(const key of state.blockedContacts) {
                 const other = [...this.before.keys()].find(v => `car:${v.chassis.physical.body.handle}` === key)
-                if(other && vehicle.position.distanceTo(other.position) < 5.2) touching.add(key)
+                if(other && vehicle.position.distanceTo(other.position) < 2.6 * (vehicle.scale + other.scale)) touching.add(key)
             }
             state.blockedContacts = touching
             if(touching.size || this.blocked.has(vehicle)) {
@@ -274,6 +301,7 @@ export class VehicleItems
         this.game.scene.add(mesh)
         body.setLinvel({ x: velocity.x, y: Math.max(velocity.y, 12), z: velocity.z }, true)
         vehicle.jumpState.airborne = true
+        vehicle.jumpState.jetFlight = true
         vehicle.jumpState.takeoffSpeed = Math.hypot(velocity.x, velocity.z)
         vehicle.jumpState.airOffset.set(0, 0, 0)
         this.pulse(vehicle.position, 9, '#bdffff')
@@ -308,7 +336,7 @@ export class VehicleItems
 
     detonate(position)
     {
-        this.game.world.fireballs.create(position, 5, 7, { groundAttenuation: false, strength: 8 })
+        this.game.world.fireballs.create(position, 5, 7, { groundAttenuation: false, strength: 8, recoveryDelay: true })
         this.game.world.explosiveCrates.sounds.explosions[0].play(position)
     }
 
@@ -317,6 +345,7 @@ export class VehicleItems
         if(entity.removed) return
         entity.removed = true
         entity.mesh.removeFromParent()
+        if(entity.marker) { entity.marker.removeFromParent(); entity.marker.geometry.dispose(); entity.marker.material.dispose() }
         if(entity.body) this.game.physics.world.removeRigidBody(entity.body)
     }
 
@@ -325,12 +354,20 @@ export class VehicleItems
         entity.age += dt
         if(entity.age >= entity.lifetime) { this.removeEntity(entity); return }
         if(entity.type !== 'missile') {
-            if(entity.age < 0.7) return
+            const progress = Math.min(1, entity.age / entity.dropDuration)
+            entity.mesh.position.y = entity.position.y + entity.dropHeight * (1 - progress * progress)
+            if(progress < 1) return
+            if(!entity.landed) {
+                entity.landed = true
+                entity.body.setEnabled(true)
+                this.pulse(entity.position, 1.3, '#e9d5b4')
+            }
+            if(entity.age < entity.dropDuration + 0.15) return
             for(const vehicle of vehicles) {
                 if(vehicle === entity.owner && entity.age < 1.4) continue
                 const previous = this.before.get(vehicle)?.position ?? vehicle.position
                 const closest = previous.distanceToSquared(vehicle.position) < 400 ? new THREE.Line3(previous, vehicle.position).closestPointToPoint(entity.position, true, new THREE.Vector3()) : vehicle.position
-                if(Math.hypot(closest.x - entity.position.x, closest.z - entity.position.z) > 1.85 || Math.abs(closest.y - entity.position.y) > 1.6) continue
+                if(Math.hypot(closest.x - entity.position.x, closest.z - entity.position.z) > 1.85 * vehicle.scale || Math.abs(closest.y - entity.position.y) > 1.6 * vehicle.scale) continue
                 if(entity.type === 'crate') this.detonate(entity.position)
                 else if(!this.absorb(vehicle, `caltrop:${entity.id}`)) {
                     const body = vehicle.chassis.physical.body
@@ -347,11 +384,39 @@ export class VehicleItems
         }
         const previous = entity.position.clone()
         entity.tracking = entity.age < 10 && !!entity.target && this.alive(entity.target)
-        if(entity.age > 0.3 && entity.tracking) {
-            const desired = entity.target.position.clone().add(new THREE.Vector3(0, 0.45, 0)).sub(previous).normalize()
-            entity.direction.lerp(desired, Math.min(1, dt * 3.5)).normalize()
+        entity.speed = 2 + entity.acceleration * entity.age
+        entity.marker.visible = entity.tracking
+        if(entity.tracking) {
+            const target = entity.target
+            entity.marker.material.color.set(this.vehicleColor(target))
+            entity.marker.position.copy(target.position).add(new THREE.Vector3(0, -0.5, 0))
+            entity.marker.rotation.z = entity.age * 2
+            const forward = target.forward.clone().setY(0).normalize()
+            if(forward.lengthSq() < 0.1) forward.set(1, 0, 0)
+            const side = new THREE.Vector3(-forward.z, 0, forward.x)
+            const offset = previous.clone().sub(target.position)
+            const behind = offset.dot(forward) < -2.4
+            if(behind && Math.abs(offset.dot(side)) < 4) entity.pursuit = true
+            // Approach from the rear quarter before pursuing the rear bumper.
+            // Moving the aim point to the bumper lets the missile finish the hit,
+            // instead of orbiting forever around a point behind the target.
+            const aim = target.position.clone().addScaledVector(forward, entity.pursuit ? -1 : -5)
+            if(!entity.pursuit && !behind) aim.addScaledVector(side, 6 * entity.routeSide)
+            const ground = this.game.world.powerups.navigation.groundAt(previous.x, previous.z)
+            aim.y = target.position.y + 0.35
+            if(ground !== null) aim.y = THREE.MathUtils.clamp(aim.y, ground + 0.9, ground + 2.8)
+            entity.aim = aim.clone()
+            if(entity.age > 0.12) {
+                const desired = aim.sub(previous).normalize()
+                // Use an angular turn limit, not a velocity lerp that loses
+                // steering authority as the missile accelerates past a car.
+                const currentRotation = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), entity.direction)
+                const desiredRotation = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), desired)
+                currentRotation.rotateTowards(desiredRotation, dt * 7)
+                entity.direction.set(1, 0, 0).applyQuaternion(currentRotation).normalize()
+            }
         }
-        const step = (entity.age < 0.3 ? 10 : 26) * this.game.ticker.deltaScaled
+        const step = entity.speed * this.game.ticker.deltaScaled
         const end = previous.clone().addScaledVector(entity.direction, step)
         let hitDistance = Infinity
         // Sweep against scenery; ignore sensors and the firing car.
@@ -359,7 +424,7 @@ export class VehicleItems
         if(rayHit) hitDistance = rayHit.timeOfImpact
         for(const vehicle of vehicles) {
             if(vehicle === entity.owner) continue
-            const radius = this.state(vehicle).shield ? 2.8 : 1.65
+            const radius = (this.state(vehicle).shield ? 2.8 : 1.65) * vehicle.scale
             const old = this.before.get(vehicle)?.position ?? vehicle.position
             const relativeStart = previous.clone().sub(old), relativeEnd = end.clone().sub(vehicle.position)
             const relative = new THREE.Line3(relativeStart, relativeEnd)
@@ -369,6 +434,7 @@ export class VehicleItems
         entity.position.copy(previous).addScaledVector(entity.direction, Math.min(step, hitDistance))
         entity.mesh.position.copy(entity.position)
         entity.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), entity.direction)
+        this.smoke.emit(entity, dt)
         if(hitDistance !== Infinity) { this.detonate(entity.position); this.removeEntity(entity) }
     }
 
@@ -377,6 +443,7 @@ export class VehicleItems
         const state = this.state(vehicle)
         this.removeShield(vehicle)
         state.jet?.mesh.removeFromParent(); state.jet = null
+        vehicle.jumpState.jetFlight = false
         state.slowUntil = 0; state.blockedContacts.clear(); state.recentHits.clear()
     }
 
@@ -420,6 +487,7 @@ export class VehicleItems
         }
         for(const entity of this.entities) if(!entity.removed) this.updateEntity(entity, dt, vehicles)
         this.entities = this.entities.filter(entity => !entity.removed)
+        this.smoke.update(dt)
         for(const pulse of this.pulses) {
             pulse.age += dt
             pulse.mesh.scale.setScalar(0.5 + pulse.radius * Math.min(1, pulse.age / 0.6))

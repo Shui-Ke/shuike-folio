@@ -3,6 +3,7 @@ import { Game } from '../Game.js'
 import { Events } from '../Events.js'
 import { lerp, remap, remapClamp, smallestAngle } from '../utilities/maths.js'
 import { VehicleUpgrades } from '../VehicleUpgrades.js'
+import { VEHICLE_SCALE } from '../WorldLayout.js'
 
 export class PhysicsVehicle
 {
@@ -11,6 +12,8 @@ export class PhysicsVehicle
         this.game = Game.getInstance()
         this.controlSource = options.controls
         this.destroyed = false
+        this.explosionRecovery = { pending: 0, extra: 0, elapsed: 0 }
+        this.scale = VEHICLE_SCALE
         this.upgrades = new VehicleUpgrades()
         this.jumpState = { used: 0, airborne: false, lastRequest: -Infinity, takeoffSpeed: 0, airOffset: new THREE.Vector3() }
 
@@ -38,9 +41,9 @@ export class PhysicsVehicle
         this.direction = this.forward.clone()
         this.speed = 0
         this.suspensionsHeights = {
-            low: 0.88,
-            mid: 1.23,
-            high: 1.63
+            low: 0.88 * this.scale,
+            mid: 1.23 * this.scale,
+            high: 1.63 * this.scale
         }
         this.suspensionsStiffness = {
             low: 20,
@@ -126,7 +129,18 @@ export class PhysicsVehicle
                 { shape: 'cuboid', mass: 2.5, parameters: [ 1.3, 0.4, 0.85 ], position: { x: 0, y: -0.1, z: 0 }, centerOfMass: { x: 0, y: -0.5, z: 0 } }, // Main
                 { shape: 'cuboid', mass: 0, parameters: [ 0.5, 0.15, 0.65 ], position: { x: 0, y: 0.4, z: 0 } }, // Top
                 { shape: 'cuboid', mass: 0, parameters: [ 1.5, 0.5, 0.9 ], position: { x: 0.1, y: -0.2, z: 0 }, category: 'bumper' }, // Bumper
-            ],
+            ].map(collider => ({ ...collider,
+                parameters: collider.parameters.map(value => value * this.scale),
+                position: Object.fromEntries(Object.entries(collider.position).map(([axis, value]) => [axis, value * this.scale])),
+                // Keep mass/drive forces unchanged, but account for the larger
+                // chassis in its rotational inertia so boost stays stable.
+                ...(collider.centerOfMass ? {
+                    // Offset the extra ride height to retain the original
+                    // center-of-mass height above the wheel contact plane.
+                    centerOfMass: { x: 0, y: -0.5 * this.scale - 0.68 * (this.scale - 1), z: 0 },
+                    principalAngularInertia: { x: this.scale ** 2, y: this.scale ** 2, z: this.scale ** 2 },
+                } : {}),
+            })),
             canSleep: false,
             waterGravityMultiplier: 0,
             onCollision: (force, position) =>
@@ -169,8 +183,8 @@ export class PhysicsVehicle
 
         // Settings
         this.wheels.settings = {
-            offset: { x: 0.90, y: 0, z: 0.75 },
-            radius: 0.4,
+            offset: { x: 0.90 * this.scale, y: 0, z: 0.75 * this.scale },
+            radius: 0.4 * this.scale,
             directionCs: { x: 0, y: -1, z: 0 },
             axleCs: { x: 0, y: 0, z: 1 },
             frictionSlip: 0.9,
@@ -434,6 +448,7 @@ export class PhysicsVehicle
 
         this.flip.jump = () =>
         {
+            if(this.explosionRecovery.extra && this.explosionRecovery.elapsed < 2) return false
             accumulatedXAngle = 0
             accumulatedZAngle = 0
 
@@ -476,6 +491,7 @@ export class PhysicsVehicle
 
     moveTo(position, rotation = 0)
     {
+        Object.assign(this.explosionRecovery, { pending: 0, extra: 0, elapsed: 0 })
         const quaternion = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), rotation)
         this.chassis.physical.body.setTranslation(position)
         this.chassis.physical.body.setRotation(quaternion)
@@ -489,6 +505,7 @@ export class PhysicsVehicle
         this.forward.set(1, 0, 0).applyQuaternion(quaternion)
         this.upward.set(0, 1, 0).applyQuaternion(quaternion)
         this.jumpState.used = 0
+        this.jumpState.jetFlight = false
         this.jumpState.airborne = false
         this.jumpState.lastRequest = -Infinity
         this.jumpState.airOffset.set(0, 0, 0)
@@ -509,6 +526,7 @@ export class PhysicsVehicle
             if(!this.game.world.items.jetJump(this)) return false
         }
         else if(!grounded && (this.upgrades.maxJumps < 2 || Math.max(1, state.used) >= this.upgrades.maxJumps)) return false
+        if(this.upsideDown.active && this.explosionRecovery.extra && this.explosionRecovery.elapsed < 2) return false
         if(grounded && this.upsideDown.active) { this.flip.jump(); return true }
         const velocity = body.linvel()
         state.used = grounded ? 1 : Math.max(1, state.used) + 1
@@ -523,10 +541,36 @@ export class PhysicsVehicle
         return true
     }
 
+    get recoveryDelay()
+    {
+        return this.explosionRecovery.pending > 0 || this.explosionRecovery.extra > 0 ? 2 : 0
+    }
+
+    markExplosionHit()
+    {
+        this.explosionRecovery.pending = 2
+        if(this.upsideDown.active) {
+            this.explosionRecovery.extra = 2
+            this.explosionRecovery.elapsed = 0
+            this.events.trigger('upsideDown')
+        }
+    }
+
     updateAirControl()
     {
         const state = this.jumpState
         if(!state.airborne || this.wheels.inContactCount > 0 || this.game.water.depthAt(this.position) > 0.15) return
+        if(state.jetFlight) {
+            const limit = lerp(this.drivingSpeedRange.normal, this.drivingSpeedRange.boost, this.controls.boosting) * this.upgrades.speedMultiplier * (this.game.world.items?.speedFactor(this) ?? 1)
+            const direction = this.forward.clone().setY(0).normalize().multiplyScalar(this.controls.accelerating)
+                .add(this.sideward.clone().setY(0).normalize().multiplyScalar(-this.controls.steering))
+            if(direction.lengthSq() > 1) direction.normalize()
+            direction.multiplyScalar(limit)
+            const body = this.chassis.physical.body, velocity = body.linvel()
+            const blend = Math.min(1, this.game.ticker.deltaScaled * 5)
+            body.setLinvel({ x: lerp(velocity.x, direction.x, blend), y: velocity.y, z: lerp(velocity.z, direction.z, blend) }, true)
+            return
+        }
         const limit = Math.max(state.takeoffSpeed, this.topSpeed * this.upgrades.speedMultiplier) * 0.25
         const direction = this.forward.clone().setY(0).normalize().multiplyScalar(this.controls.accelerating)
             .add(this.sideward.clone().setY(0).normalize().multiplyScalar(-this.controls.steering))
@@ -708,12 +752,20 @@ export class PhysicsVehicle
         if(inContactCount >= 2 && jump.airborne && this.chassis.physical.body.linvel().y < 1.5 && this.game.ticker.elapsed - jump.lastRequest > 0.18)
         {
             jump.used = 0
+            jump.jetFlight = false
             jump.airborne = false
             jump.airOffset.set(0, 0, 0)
         }
 
         this.stop.test()
         this.upsideDown.test()
+        const recovery = this.explosionRecovery
+        if(this.upsideDown.active) {
+            if(recovery.pending > 0) recovery.extra = 2
+            recovery.elapsed += this.game.ticker.delta
+        }
+        else { recovery.extra = 0; recovery.elapsed = 0 }
+        recovery.pending = Math.max(0, recovery.pending - this.game.ticker.delta)
         this.stuck.test()
         // this.backWheel.test()
         this.flip.test()

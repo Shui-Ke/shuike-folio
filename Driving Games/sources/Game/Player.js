@@ -347,7 +347,7 @@ export class Player
 
         const waitAndTest = () =>
         {
-            this.unstuck.delay = gsap.delayedCall(this.unstuck.duration, () =>
+            this.unstuck.delay = gsap.delayedCall(this.unstuck.duration + this.game.physicalVehicle.recoveryDelay, () =>
             {
                 this.unstuck.delay = null
 

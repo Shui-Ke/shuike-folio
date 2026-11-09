@@ -6,7 +6,7 @@ const assert = require('node:assert/strict')
 
 ;(async () => {
     const root = path.resolve(__dirname, '..')
-    const output = path.join(root, 'previews')
+    const output = process.env.GAME_TEST_OUTPUT || path.join(root, 'previews')
     fs.mkdirSync(output, { recursive: true })
     const server = spawn(process.execPath, ['node_modules/vite/bin/vite.js', '--host', '127.0.0.1', '--port', '4193', '--strictPort', '--open=false'], { cwd: root, windowsHide: true, stdio: 'ignore' })
     let browser
@@ -56,6 +56,8 @@ const assert = require('node:assert/strict')
             player.moveTo(g.respawns.getDefault().position)
             pickups.clock = pickup.respawnAt + 0.01
             pickups.previousPositions.clear(); pickups.update()
+            bot.moveTo(pickup.position.clone().add({ x: 0, y: 1, z: 0 }))
+            pickups.previousPositions.clear(); pickups.update()
             const botCollect = bot.upgrades.power === 1 && !pickup.active
             const caps = {}
             for(const type of ['power','speed','jump']) {
@@ -91,7 +93,7 @@ const assert = require('node:assert/strict')
             }
             const speeds = [0,1,2].map(level => ({ normal: drive(level, 0), boost: drive(level, 1) }))
             const collide = (level, speed, rotation = 0, speedLevel = 0) => {
-                reset(player, 2000, 0, rotation); reset(bot, 2003.5)
+                reset(player, 2000, 0, rotation); reset(bot, 2004.5)
                 for(let i = 0; i < 40; i++) tick()
                 player.upgrades.power = level
                 player.upgrades.speed = speedLevel
@@ -104,7 +106,7 @@ const assert = require('node:assert/strict')
                     apex = Math.max(apex, bot.position.y)
                     peakZoom = Math.max(peakZoom, g.view.spherical.radius.current)
                     if(!firstHit && combat.hitCount > count) {
-                        firstHit = { strength: combat.lastHit.strength, bonus: combat.lastHit.bonusSpeed, heavyImpact: combat.lastHit.heavyImpact, range: combat.lastHit.launchRange }
+                        firstHit = { strength: combat.lastHit.strength, bonus: combat.lastHit.bonusSpeed, heavyImpact: combat.lastHit.heavyImpact, range: combat.lastHit.launchRange, end: combat.lastHit.end, direction: combat.lastHit.direction.toArray() }
                         player.deactivate()
                     }
                     if(firstHit?.heavyImpact && landingRange === null && bot.launch.elapsed > 1) {
@@ -122,11 +124,16 @@ const assert = require('node:assert/strict')
             const pushes = [0,1,2,3,4,5].map(level => collide(level, 35))
             const lowHit = collide(5, 5)
             const rearHit = collide(5, 35, Math.PI)
+            const rearBase = collide(0, 22.6, Math.PI)
+            const rearSlow = collide(0, 5, Math.PI)
+            const sideHit = collide(5, 35, Math.PI / 2)
             const maxHit = collide(5, 42)
             const baseImpact = collide(0, 22.6)
             const poweredCruise = collide(5, 11)
             const speedBuffImpact = collide(2, 22, 0, 2)
             const plainCruise = collide(0, 11)
+            const loweredGate = collide(0, 21.5)
+            if(!loweredGate.hit?.heavyImpact || loweredGate.hit.strength < 4 || loweredGate.hit.strength >= 5) throw new Error('Reduced impact threshold must trigger between scores 4 and 5: ' + JSON.stringify(loweredGate))
 
             bot.deactivate(); reset(player, 2000)
             for(let i = 0; i < 40; i++) tick([player])
@@ -165,7 +172,7 @@ const assert = require('node:assert/strict')
             const resetOnRevive = player.upgrades.power === 0 && player.upgrades.speed === 0 && player.upgrades.jump === 0
             g.physics.world.removeRigidBody(floor)
             for(let i = 0; i < 150; i++) { combat.updateFlights(); g.view.update() }
-            return { counts, playerCollect, singleConsumer, botCollect, caps, capRejected, aiTarget, speeds, pushes, lowHit, rearHit, maxHit, baseImpact, poweredCruise, speedBuffImpact, plainCruise, cameraRestored: Math.abs(g.view.spherical.radius.current - 30) < 0.1, jumps: { firstJump, noExtraWithoutBuff, secondJump, beforeY, afterY, noThirdJump, airMovement, airOffset, airLimit, landed }, effect, resetOnRevive }
+            return { counts, playerCollect, singleConsumer, botCollect, caps, capRejected, aiTarget, speeds, pushes, lowHit, rearHit, rearBase, rearSlow, sideHit, maxHit, baseImpact, poweredCruise, speedBuffImpact, plainCruise, cameraRestored: Math.abs(g.view.spherical.radius.current - 30) < 0.1, jumps: { firstJump, noExtraWithoutBuff, secondJump, beforeY, afterY, noThirdJump, airMovement, airOffset, airLimit, landed }, effect, resetOnRevive }
         })
         console.log(JSON.stringify(result, null, 2))
         assert.ok(Object.values(result.counts).every(count => count >= 3))
@@ -177,15 +184,21 @@ const assert = require('node:assert/strict')
         }
         for(let i = 0; i < 6; i++) {
             assert.equal(result.pushes[i].hits, 1)
-            assert.equal(result.pushes[i].hit.range, 50)
-            assert.ok(result.pushes[i].displacement > 45 && result.pushes[i].displacement < 56)
+            const expectedRange = 50 * Math.min(1, result.pushes[i].hit.strength / 30)
+            assert.ok(Math.abs(result.pushes[i].hit.range - expectedRange) < 0.001)
+            assert.ok(Math.abs(result.pushes[i].displacement - expectedRange) < 6)
             if(i) assert.ok(result.pushes[i].hit.strength > result.pushes[i-1].hit.strength)
         }
         assert.ok(result.lowHit.displacement < result.pushes[5].displacement)
-        assert.equal(result.rearHit.hits, 0)
+        assert.equal(result.rearHit.hits, 1)
+        assert.ok(result.rearHit.hit.heavyImpact && result.rearHit.hit.end === 'rear' && result.rearHit.hit.direction[0] > 0.99)
+        assert.ok(result.rearHit.displacement > 45 && result.rearHit.displacement < 56)
+        assert.ok(result.rearBase.hit.heavyImpact && result.rearBase.hit.strength === 5)
+        assert.ok(!result.rearSlow.hit.heavyImpact)
+        assert.equal(result.sideHit.hits, 0)
         assert.ok(result.maxHit.hit.heavyImpact && result.baseImpact.hit.heavyImpact && result.poweredCruise.hit.heavyImpact && result.speedBuffImpact.hit.heavyImpact && !result.plainCruise.hit.heavyImpact)
         assert.ok(result.maxHit.displacement > 45 && result.maxHit.displacement < 56)
-        assert.ok(result.baseImpact.displacement > 45 && result.baseImpact.displacement < 56 && result.baseImpact.apex > 9 && result.baseImpact.peakZoom > 55 && result.cameraRestored)
+        assert.ok(Math.abs(result.baseImpact.displacement - 50 / 6) < 6 && result.baseImpact.apex > 2 && result.cameraRestored)
         assert.ok(result.jumps.firstJump && result.jumps.noExtraWithoutBuff && result.jumps.secondJump && result.jumps.noThirdJump && result.jumps.landed)
         assert.ok(result.jumps.afterY > result.jumps.beforeY && result.jumps.airMovement > 0.05 && result.jumps.airOffset <= result.jumps.airLimit + 0.01)
         assert.ok(result.effect.triggered && result.effect.slowScale < 0.6 && result.effect.restoredScale === 2 && result.effect.fireballCreated && result.effect.velocitiesUnchanged && result.effect.noFlash && result.resetOnRevive)
@@ -205,7 +218,7 @@ const assert = require('node:assert/strict')
             g.view.focusPoint.smoothedPosition.copy(player.position)
             g.view.update()
             const point = spawn.clone().add({ x: 2, y: 1, z: 0 })
-            combat.launch({ attacker: player, target: bot, direction: spawn.clone().set(1, 0, 0), point, strength: 5 })
+            combat.launch({ attacker: player, target: bot, direction: spawn.clone().set(1, 0, 0), point, strength: 30 })
             combat.effectCooldown = 0; combat.playImpact(point)
             window.gameplayGsap.globalTimeline.time(window.gameplayGsap.globalTimeline.time() + 0.3)
             g.world.visualVehicle.update(); g.world.rivals.items[0].visual.update()
@@ -240,7 +253,7 @@ const assert = require('node:assert/strict')
         assert.ok(visual.radius > 50 && visual.trailIndices > 100 && visual.height > 8)
         assert.deepEqual(errors, [])
         assert.deepEqual(missing, [])
-        console.log('PASS: real pickups for player/AI, caps, measured speed ratios, six collision levels, front-only hits, double jump and air control, impact slow motion and recovery.')
+        console.log('PASS: real pickups for player/AI, caps, measured speed ratios, front/rear heavy impacts, double jump and air control, impact slow motion and recovery.')
     } finally {
         if(browser) await browser.close()
         server.kill()

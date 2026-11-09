@@ -11,6 +11,7 @@
     "test:water-damage": "node tests/water-damage-runtime.cjs",
     "test:gameplay": "node tests/gameplay-runtime.cjs",
     "test:items": "node tests/items-runtime.cjs",
+    "test:map": "node tests/map-expansion-runtime.cjs",
     "build:props": "node tools/build-props.mjs"
   },
   "author": "",

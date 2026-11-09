@@ -12,7 +12,7 @@ export class Explosions
         this.events = new Events()
     }
 
-    explode(coordinates, radius = 7, strength = 4, vehicleOnly = false, bulletTimeStrengthThreshold = 3)
+    explode(coordinates, radius = 7, strength = 4, vehicleOnly = false, bulletTimeStrengthThreshold = 3, recoveryDelay = false)
     {
         const hitKey = `explosion:${this.explosionSerial = (this.explosionSerial ?? 0) + 1}`
         // View roll
@@ -52,6 +52,7 @@ export class Explosions
                 this.game.ticker.wait(1, () =>
                 {
                     physicalObject.body.applyImpulseAtPoint(impulse, point, true)
+                    if(vehicle && recoveryDelay && finalStrength > 0) vehicle.markExplosionHit()
                 })
 
                 // Is vehicle
