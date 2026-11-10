@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu'
 import { Game } from './Game.js'
-import { clamp, lerp, remap } from './utilities/maths.js'
+import { clamp, lerp, remap, smallestAngle } from './utilities/maths.js'
 import { mix, uniform, vec4, Fn, positionGeometry, attribute } from 'three/tsl'
 import { alea } from 'seedrandom'
 
@@ -23,12 +23,17 @@ export class View
         this.setZoom()
         this.spherical = {
             phi: Math.PI * 0.31,
-            theta: Math.PI * 0.25,
-            radius: { edges: { min: 8, max: 60 }, current: 30, nonIdealRatioOffset: 9 },
+            // Yaw is driven by the car's forward vector every frame; this is
+            // only the fallback used before the vehicle exists.
+            theta: Math.PI * 0.5,
+            radius: { edges: { min: 8, max: 60 }, current: 36, nonIdealRatioOffset: 9 },
             offset: new THREE.Vector3()
         }
         // Explosions may request a kick, but the fixed camera never rolls.
         this.roll = { value: 0, kick: () => {} }
+        // Chase yaw is damped: a spinning nose must not spin the whole screen.
+        this.chase = { follow: 2.6, maxTurn: 1.5, deadzone: 0.02, spinStart: 2.5, spinRange: 5, minGain: 0.2, gain: 1, lastHeading: null }
+        this.cameraMode = 'chase'
         this.camera = new THREE.PerspectiveCamera(25, this.game.viewport.ratio, 0.1, 600)
         this.impactBlend = 0
         this.defaultCamera = this.camera.clone()
@@ -101,6 +106,7 @@ export class View
     {
         this.optimalArea = {}
         this.optimalArea.needsUpdate = true
+        this.optimalArea.timer = 0
         this.optimalArea.position = new THREE.Vector3()
         this.optimalArea.basePosition = new THREE.Vector3()
         this.optimalArea.nearPosition = new THREE.Vector3()
@@ -216,7 +222,7 @@ export class View
 
     setZoom()
     {
-        const initialRatio = (60 - 30) / (60 - 8)
+        const initialRatio = (60 - 36) / (60 - 8)
         this.zoom = { baseRatio: initialRatio, ratio: initialRatio, smoothedRatio: initialRatio, sensitivity: 0.05 }
         this.game.inputs.addActions([
             { name: 'zoom', categories: ['wandering', 'racing'], keys: ['Wheel.roll'] }
@@ -331,6 +337,23 @@ export class View
     }
 
 
+    setCameraMode(mode)
+    {
+        this.cameraMode = mode === 'classic' ? 'classic' : 'chase'
+
+        if(this.cameraMode === 'classic')
+        {
+            // Original fixed diagonal overhead view.
+            this.spherical.theta = Math.PI * 0.25
+            this.optimalArea.needsUpdate = true
+        }
+        else
+        {
+            this.chase.lastHeading = null
+            this.chase.gain = 1
+        }
+    }
+
     recenter(position)
     {
         if(!this.focusPoint)
@@ -376,6 +399,39 @@ export class View
             this.camera.updateProjectionMatrix()
             this.defaultCamera.updateProjectionMatrix()
         }
+        const vehicle = this.game.physicalVehicle
+        if(this.cameraMode === 'chase' && vehicle)
+        {
+            const forward = vehicle.forward
+            const horizontal = Math.hypot(forward.x, forward.z)
+            if(horizontal > 0.001)
+            {
+                const delta = this.game.ticker.delta
+                const heading = Math.atan2(forward.z, forward.x)
+
+                // A fast-spinning nose (drift, handbrake spin) barely moves the
+                // camera; normal steering still tracks at full speed.
+                if(this.chase.lastHeading !== null)
+                {
+                    const rate = Math.abs(smallestAngle(this.chase.lastHeading, heading)) / Math.max(1e-4, delta)
+                    const spin = clamp((rate - this.chase.spinStart) / this.chase.spinRange, 0, 1)
+                    this.chase.gain = 1 - spin * (1 - this.chase.minGain)
+                }
+                this.chase.lastHeading = heading
+
+                const target = Math.atan2(-forward.x, -forward.z)
+                const difference = smallestAngle(this.spherical.theta, target)
+                if(Math.abs(difference) > this.chase.deadzone)
+                {
+                    // Exponential follow with an angular-speed cap, both scaled
+                    // by the spin gain.
+                    const smoothing = (1 - Math.exp(- this.chase.follow * delta)) * this.chase.gain
+                    const maxStep = this.chase.maxTurn * delta * this.chase.gain
+                    this.spherical.theta += clamp(difference * smoothing, - maxStep, maxStep)
+                }
+            }
+        }
+
         this.spherical.offset.setFromSphericalCoords(this.spherical.radius.current, this.spherical.phi, this.spherical.theta)
         this.position.copy(this.focusPoint.smoothedPosition).add(this.spherical.offset)
         this.delta.copy(this.position).sub(this.defaultCamera.position)
@@ -386,6 +442,14 @@ export class View
         this.camera.updateMatrixWorld()
         this.defaultCamera.updateMatrixWorld()
 
+        // The chase camera rotates, so refresh the screen-space coverage/fog
+        // ranges a few times per second instead of baking the initial yaw.
+        this.optimalArea.timer += this.game.ticker.delta
+        if(this.optimalArea.timer > 0.4)
+        {
+            this.optimalArea.timer = 0
+            this.optimalArea.needsUpdate = true
+        }
         if(this.optimalArea.needsUpdate) this.optimalArea.update()
         this.optimalArea.position.copy(this.optimalArea.basePosition)
             .add(new THREE.Vector3(this.focusPoint.smoothedPosition.x, 0, this.focusPoint.smoothedPosition.z))

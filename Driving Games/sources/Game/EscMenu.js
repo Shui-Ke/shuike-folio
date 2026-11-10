@@ -42,6 +42,9 @@ export class EscMenu
         this.build()
         this.bind()
         this.applyVolume(this.settings.volume, false)
+        this.game.view?.setCameraMode(this.settings.camera)
+        if(this.settings.permanentDay)
+            this.game.dayCycles?.override.start({ progress: TIME_PRESETS.noon }, 0)
         this.syncAll()
 
         this.liveTimer = window.setInterval(() =>
@@ -72,7 +75,8 @@ export class EscMenu
                         <button class="esc-tab is-active" type="button" data-esc-tab="time"><span>01</span>Time</button>
                         <button class="esc-tab" type="button" data-esc-tab="weather"><span>02</span>Weather</button>
                         <button class="esc-tab" type="button" data-esc-tab="quality"><span>03</span>Quality</button>
-                        <button class="esc-tab" type="button" data-esc-tab="audio"><span>04</span>Audio</button>
+                        <button class="esc-tab" type="button" data-esc-tab="camera"><span>04</span>Camera</button>
+                        <button class="esc-tab" type="button" data-esc-tab="audio"><span>05</span>Audio</button>
                     </nav>
 
                     <div class="esc-menu__body">
@@ -92,6 +96,10 @@ export class EscMenu
                                 <button class="esc-button" type="button" data-esc-time="night">Night</button>
                                 <button class="esc-button" type="button" data-esc-time="dawn">Dawn</button>
                                 <button class="esc-button" type="button" data-esc-time-auto>Auto cycle</button>
+                            </div>
+                            <div class="esc-row">
+                                <span class="esc-row__label">Permanent day</span>
+                                <button class="esc-toggle" type="button" data-esc-day>Off</button>
                             </div>
                         </section>
 
@@ -139,6 +147,21 @@ export class EscMenu
                             </div>
                         </section>
 
+                        <section class="esc-panel" data-esc-panel="camera">
+                            <h3>Camera</h3>
+                            <p class="esc-panel__intro">Pick how the camera follows the car.</p>
+                            <div class="esc-choice-grid">
+                                <button class="esc-choice" type="button" data-esc-camera="chase">
+                                    <strong>Chase</strong>
+                                    <small>Damped follow behind the car. The view keeps facing the W heading.</small>
+                                </button>
+                                <button class="esc-choice" type="button" data-esc-camera="classic">
+                                    <strong>Classic</strong>
+                                    <small>Fixed diagonal overhead angle. The car turns on screen.</small>
+                                </button>
+                            </div>
+                        </section>
+
                         <section class="esc-panel" data-esc-panel="audio">
                             <h3>Audio</h3>
                             <p class="esc-panel__intro">Mute everything or set the master volume.</p>
@@ -174,6 +197,7 @@ export class EscMenu
         this.weatherSnow = menu.querySelector('[data-esc-weather-snow]')
         this.weatherStorm = menu.querySelector('[data-esc-weather-storm]')
         this.audioToggle = menu.querySelector('[data-esc-audio-toggle]')
+        this.dayToggle = menu.querySelector('[data-esc-day]')
         this.volumeRange = menu.querySelector('[data-esc-volume]')
         this.volumeLabel = menu.querySelector('[data-esc-volume-label]')
     }
@@ -223,8 +247,17 @@ export class EscMenu
 
         this.element.querySelector('[data-esc-time-auto]').addEventListener('click', () =>
         {
-            this.game.dayCycles.override.end(0.8)
+            if(this.settings.permanentDay)
+                this.setPermanentDay(false)
+            else
+                this.game.dayCycles.override.end(0.8)
+
             this.syncTime()
+        })
+
+        this.dayToggle.addEventListener('click', () =>
+        {
+            this.setPermanentDay(!this.settings.permanentDay)
         })
 
         for(const button of this.element.querySelectorAll('[data-esc-weather]'))
@@ -250,6 +283,14 @@ export class EscMenu
             {
                 this.game.quality.changeLevel(Number(button.dataset.escQuality))
                 this.syncQuality()
+            })
+        }
+
+        for(const button of this.element.querySelectorAll('[data-esc-camera]'))
+        {
+            button.addEventListener('click', () =>
+            {
+                this.setCamera(button.dataset.escCamera)
             })
         }
 
@@ -329,9 +370,52 @@ export class EscMenu
         if(!cycle)
             return
 
+        if(this.settings.permanentDay)
+            this.setPermanentDay(false)
+
         const clamped = Math.max(0, Math.min(1, value))
         cycle.override.start({ progress: clamped }, duration)
         this.syncTime(clamped)
+    }
+
+    setPermanentDay(enabled)
+    {
+        this.settings.permanentDay = !!enabled
+        const cycle = this.game.dayCycles
+
+        if(cycle)
+        {
+            if(this.settings.permanentDay)
+                cycle.override.start({ progress: TIME_PRESETS.noon }, 0.8)
+            else
+                cycle.override.end(0.8)
+        }
+
+        this.saveSettings()
+        this.syncDay()
+
+        if(this.settings.permanentDay)
+            this.syncTime(TIME_PRESETS.noon)
+    }
+
+    syncDay()
+    {
+        this.dayToggle.textContent = this.settings.permanentDay ? 'On' : 'Off'
+        this.dayToggle.classList.toggle('is-on', this.settings.permanentDay)
+    }
+
+    setCamera(mode)
+    {
+        this.settings.camera = mode === 'classic' ? 'classic' : 'chase'
+        this.game.view?.setCameraMode(this.settings.camera)
+        this.saveSettings()
+        this.syncCamera()
+    }
+
+    syncCamera()
+    {
+        for(const button of this.element.querySelectorAll('[data-esc-camera]'))
+            button.classList.toggle('is-active', button.dataset.escCamera === this.settings.camera)
     }
 
     setTimePreset(name)
@@ -434,6 +518,8 @@ export class EscMenu
         this.syncTime()
         this.syncWeather()
         this.syncQuality()
+        this.syncCamera()
+        this.syncDay()
         this.syncAudio()
     }
 
@@ -457,12 +543,14 @@ export class EscMenu
         {
             const settings = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')
             return {
-                volume: typeof settings.volume === 'number' ? settings.volume : 0.8
+                volume: typeof settings.volume === 'number' ? settings.volume : 0.8,
+                camera: settings.camera === 'classic' ? 'classic' : 'chase',
+                permanentDay: settings.permanentDay === true
             }
         }
         catch
         {
-            return { volume: 0.8 }
+            return { volume: 0.8, camera: 'chase', permanentDay: false }
         }
     }
 

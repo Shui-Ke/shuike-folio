@@ -1,7 +1,15 @@
 import { Game } from './Game.js'
 import { PAINTS } from './Config.js'
 
-const BOT_LABELS = { blue: '蓝', yellow: '黄', purple: '紫', cyan: '青', green: '绿' }
+const BOT_LABELS = {
+    blue: 'Blue',
+    yellow: 'Yellow',
+    purple: 'Purple',
+    cyan: 'Cyan',
+    green: 'Green',
+    pink: 'Pink',
+    lime: 'Lime',
+}
 
 // Small right-side board: who is still driving, and how many lives are left.
 export class Roster
@@ -49,7 +57,7 @@ export class Roster
         this.rows = []
 
         const paint = PAINTS.find(item => item.name === this.game.config.paint) ?? PAINTS[0]
-        this.addRow(this.game.physicalVehicle, paint.label, paint.top, true)
+        this.addRow(this.game.physicalVehicle, 'You', paint.top, true)
 
         for(const bot of this.game.world.rivals?.items ?? [])
             this.addRow(bot.vehicle, BOT_LABELS[bot.color] ?? bot.color, bot.colorCss ?? '#ffffff', false, bot)

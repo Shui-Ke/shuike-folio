@@ -172,7 +172,7 @@ const assert = require('node:assert/strict')
             const resetOnRevive = player.upgrades.power === 0 && player.upgrades.speed === 0 && player.upgrades.jump === 0
             g.physics.world.removeRigidBody(floor)
             for(let i = 0; i < 150; i++) { combat.updateFlights(); g.view.update() }
-            return { counts, playerCollect, singleConsumer, botCollect, caps, capRejected, aiTarget, speeds, pushes, lowHit, rearHit, rearBase, rearSlow, sideHit, maxHit, baseImpact, poweredCruise, speedBuffImpact, plainCruise, cameraRestored: Math.abs(g.view.spherical.radius.current - 30) < 0.1, jumps: { firstJump, noExtraWithoutBuff, secondJump, beforeY, afterY, noThirdJump, airMovement, airOffset, airLimit, landed }, effect, resetOnRevive }
+            return { counts, playerCollect, singleConsumer, botCollect, caps, capRejected, aiTarget, speeds, pushes, lowHit, rearHit, rearBase, rearSlow, sideHit, maxHit, baseImpact, poweredCruise, speedBuffImpact, plainCruise, cameraRestored: Math.abs(g.view.spherical.radius.current - 36) < 0.1, jumps: { firstJump, noExtraWithoutBuff, secondJump, beforeY, afterY, noThirdJump, airMovement, airOffset, airLimit, landed }, effect, resetOnRevive }
         })
         console.log(JSON.stringify(result, null, 2))
         assert.ok(Object.values(result.counts).every(count => count >= 3))

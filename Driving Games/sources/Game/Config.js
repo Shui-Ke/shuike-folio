@@ -8,6 +8,18 @@ const BOT_LIMIT = 7
 // unit of `items`, so the setup screen can report a real total.
 export const PICKUP_TYPE_COUNT = 3 + ITEM_TYPES.length
 
+// Shield and missile are the strongest pickups, so they spawn less often than
+// the rest of the pool.
+export const PICKUP_WEIGHTS = { shield: 0.6, missile: 0.6 }
+
+export function pickupTotalFor(perType)
+{
+    const types = ['power', 'speed', 'jump', ...ITEM_TYPES.map(item => item.type)]
+
+    return types.reduce((total, type) =>
+        total + Math.max(0, Math.floor(perType * (PICKUP_WEIGHTS[type] ?? 1))), 0)
+}
+
 export const PAINTS = [
     { name: 'red',     label: '赤红', top: '#ff3a3a', bottom: '#721551' },
     { name: 'orange',  label: '橙焰', top: '#ff9a3c', bottom: '#a83c00' },
@@ -175,7 +187,7 @@ export class Config
     get items() { return this.values.items }
     get profile() { return DIFFICULTIES[this.values.difficulty] }
     get revives() { return this.profile?.revives ?? 0 }
-    get pickupTotal() { return this.values.items * PICKUP_TYPE_COUNT }
+    get pickupTotal() { return pickupTotalFor(this.values.items) }
 
     toInt(value, fallback)
     {

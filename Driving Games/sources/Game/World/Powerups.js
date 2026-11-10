@@ -6,6 +6,7 @@ import { MeshDefaultMaterial } from '../Materials/MeshDefaultMaterial.js'
 import { VehicleNavigation } from './VehicleNavigation.js'
 import { speedWhiteValue } from '../VehicleUpgrades.js'
 import { ITEM_TYPES } from '../ItemDefinitions.js'
+import { PICKUP_WEIGHTS } from '../Config.js'
 
 const TYPES = [
     { type: 'power', file: 'power-plus', title: 'POWER+', color: '#ffb64f' },
@@ -69,10 +70,20 @@ export class Powerups
             return
         }
 
-        const positions = this.randomPositions(TYPES.length * perType)
+        // Weighted pool: shield and missile spawn less often than other types.
+        const plan = []
+        for(let typeIndex = 0; typeIndex < TYPES.length; typeIndex++)
+        {
+            const definition = TYPES[typeIndex]
+            const count = Math.max(0, Math.floor(perType * (PICKUP_WEIGHTS[definition.type] ?? 1)))
+            for(let i = 0; i < count; i++)
+                plan.push(typeIndex)
+        }
+
+        const positions = this.randomPositions(plan.length)
         positions.forEach((position, index) =>
         {
-            const typeIndex = index % TYPES.length, definition = TYPES[typeIndex]
+            const typeIndex = plan[index], definition = TYPES[typeIndex]
             const group = new THREE.Group()
             const model = this.templates[typeIndex].clone(true)
             model.scale.setScalar(0.91)

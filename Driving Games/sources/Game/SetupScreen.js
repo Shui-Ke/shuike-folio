@@ -1,5 +1,5 @@
 import { Game } from './Game.js'
-import { PAINTS, ITEM_PRESETS, DIFFICULTIES, PICKUP_TYPE_COUNT } from './Config.js'
+import { PAINTS, ITEM_PRESETS, DIFFICULTIES, pickupTotalFor } from './Config.js'
 
 // Pre-match setup shown where the old "click to start" prompt was. Everything
 // it writes lives in Config, so the world is built from one source of truth and
@@ -67,7 +67,7 @@ export class SetupScreen
                         <div class="setup-choices setup-choices--wide" role="group" aria-label="道具分布">
                             ${ITEM_PRESETS.map(preset => `
                                 <button class="setup-choice" type="button" data-value="${preset.perType}" aria-pressed="false">
-                                    <b>${preset.label}</b><small>${preset.perType * PICKUP_TYPE_COUNT} 个</small>
+                                    <b>${preset.label}</b><small>${pickupTotalFor(preset.perType)} 个</small>
                                 </button>`).join('')}
                         </div>
                     </section>

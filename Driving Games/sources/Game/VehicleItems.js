@@ -366,16 +366,16 @@ export class VehicleItems
         vehicle.jumpState.jetFlight = true
         vehicle.jumpState.takeoffSpeed = Math.hypot(velocity.x, velocity.z)
         vehicle.jumpState.airOffset.set(0, 0, 0)
-        this.pulse(vehicle.position, 9, '#bdffff')
+        this.pulse(vehicle.position, 13, '#bdffff')
         const key = `jet:${++this.serial}`
         for(const other of this.vehicles()) {
             if(other === vehicle) continue
             if(this.game.world.rivals?.isFriendlyPair?.(vehicle, other)) continue
             const delta = other.position.clone().sub(vehicle.position), distance = delta.length()
-            if(distance > 9 || this.absorb(other, key)) continue
+            if(distance > 13 || this.absorb(other, key)) continue
             const direction = delta.setY(0)
             if(direction.lengthSq() < 0.01) direction.copy(vehicle.forward)
-            direction.normalize().multiplyScalar(14 * (1 - distance / 12)); direction.y = 4
+            direction.normalize().multiplyScalar(20 * (1 - distance / 15)); direction.y = 5.5
             const otherBody = other.chassis.physical.body
             otherBody.applyImpulse(direction.multiplyScalar(otherBody.mass()), true)
         }
