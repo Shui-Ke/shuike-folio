@@ -107,8 +107,9 @@ export class BotRadar
 
             const length = Math.hypot(dx, dy)
             const scale = Math.min(maxX / Math.max(1e-5, Math.abs(dx)), maxY / Math.max(1e-5, Math.abs(dy)))
-            // Fan same-direction markers so three rivals do not stack into one.
-            const spread = ((bot.index % 3) - 1) * SPREAD
+            // Fan same-direction markers so a 7-car pack does not stack into one.
+            const count = Math.max(1, bots.length)
+            const spread = (bot.index - (count - 1) / 2) * (SPREAD * 0.6)
             const x = halfWidth + dx * scale - (dy / length) * spread
             const y = halfHeight + dy * scale + (dx / length) * spread
 

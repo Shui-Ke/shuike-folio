@@ -11,6 +11,8 @@ const PAINTS = [
     { name: 'purple', top: '#d38bff', bottom: '#7131bb' },
     { name: 'cyan', top: '#5ce1e6', bottom: '#0a5f66' },
     { name: 'green', top: '#63e06b', bottom: '#1a6b2a' },
+    { name: 'pink', top: '#ff77c8', bottom: '#8a1a5e' },
+    { name: 'lime', top: '#c8ff4d', bottom: '#4d7a00' },
 ]
 
 export class RivalVehicles
@@ -58,7 +60,7 @@ export class RivalVehicles
         const reserved = this.game.config.paint
         const paints = PAINTS.filter(paint => paint.name !== reserved)
         // Extreme runs a split squad: a fixed chase pack plus item runners.
-        const chaseCount = Math.min(this.profile.chaseSquad ?? count, count)
+        const chaseCount = Math.min(this.chaseSquadSize(count) || count, count)
         this.nextRoleUpdate = 0
 
         for(let index = 0; index < count; index++)
@@ -94,7 +96,7 @@ export class RivalVehicles
         if(bot.visual.antenna) bot.visual.antenna.head.visible = visible
     }
 
-    spawnPosition(bot)
+    spawnPosition(bot, anchor = null)
     {
         // Rivals appear anywhere on the island, never next to the player, so a
         // match starts spread out instead of with three cars already on you.
@@ -102,7 +104,73 @@ export class RivalVehicles
         const bound = this.game.water.ocean.start * 0.97
         const player = this.game.physicalVehicle.position
 
-        for(let attempt = 0; attempt < 600; attempt++)
+        const blocked = position =>
+        {
+            let occupied = false
+            this.game.physics.world.intersectionsWithShape(
+                position, this.navigation.identity, new this.game.RAPIER.Ball(2.8),
+                () => { occupied = true; return false },
+                undefined, undefined, undefined, bot.vehicle.chassis.physical.body,
+                collider => !collider.isSensor() && !this.navigation.isGround(collider)
+            )
+            return occupied
+        }
+
+        // New bodies are absent from Rapier's query index until the next step.
+        // Check other cars explicitly when spawning several in one frame.
+        const clearOfCars = (position, radius) =>
+            !this.items.some(other => other !== bot && other.state !== 'waiting' && other.vehicle.position.distanceTo(position) < radius)
+
+        // Recovery: stay in the same area instead of teleporting across the map.
+        if(anchor)
+        {
+            for(let attempt = 0; attempt < 260; attempt++)
+            {
+                const angle = random() * Math.PI * 2
+                const radius = 6 + random() * 16
+                const ground = this.navigation.sample(anchor.x + Math.cos(angle) * radius, anchor.z + Math.sin(angle) * radius)
+                if(!ground) continue
+
+                const position = ground.clone().add(new THREE.Vector3(0, 1.7, 0))
+                if(position.distanceTo(player) < 8) continue
+                if(!clearOfCars(position, 10)) continue
+                if(blocked(position)) continue
+
+                return position
+            }
+        }
+
+        // Fresh match or a lost life: relax the margins instead of leaving the
+        // car invisible in `waiting` forever.
+        const tiers = anchor
+            ? [{ minPlayer: 30, minCars: 14, attempts: 260 }]
+            : [
+                { minPlayer: 42, minCars: 20, attempts: 220 },
+                { minPlayer: 30, minCars: 14, attempts: 220 },
+                { minPlayer: 18, minCars: 10, attempts: 220 },
+                { minPlayer: 10, minCars: 6, attempts: 180 },
+            ]
+
+        for(const tier of tiers)
+        {
+            for(let attempt = 0; attempt < tier.attempts; attempt++)
+            {
+                const x = (random() * 2 - 1) * bound
+                const z = (random() * 2 - 1) * bound
+                const ground = this.navigation.sample(x, z)
+                if(!ground) continue
+
+                const position = ground.clone().add(new THREE.Vector3(0, 1.7, 0))
+                if(position.distanceTo(player) < tier.minPlayer) continue
+                if(!clearOfCars(position, tier.minCars)) continue
+                if(blocked(position)) continue
+
+                return position
+            }
+        }
+
+        // Last resort: any drivable cell, even if it is close to someone.
+        for(let attempt = 0; attempt < 240; attempt++)
         {
             const x = (random() * 2 - 1) * bound
             const z = (random() * 2 - 1) * bound
@@ -110,10 +178,40 @@ export class RivalVehicles
             if(!ground) continue
 
             const position = ground.clone().add(new THREE.Vector3(0, 1.7, 0))
-            if(position.distanceTo(player) < 42) continue
-            // New bodies are absent from Rapier's query index until the next
-            // step. Check other cars explicitly when spawning several at once.
-            if(this.items.some(other => other !== bot && other.state !== 'waiting' && other.vehicle.position.distanceTo(position) < 20)) continue
+            if(blocked(position)) continue
+
+            return position
+        }
+
+        // Never keep a rival invisible: fall back to the match start area.
+        const fallback = this.game.respawns.getDefault().position
+        for(let attempt = 0; attempt < 12; attempt++)
+        {
+            const angle = random() * Math.PI * 2
+            const ground = this.navigation.sample(fallback.x + Math.cos(angle) * 8, fallback.z + Math.sin(angle) * 8)
+            if(ground)
+                return ground.clone().add(new THREE.Vector3(0, 1.7, 0))
+        }
+
+        return fallback.clone().add(new THREE.Vector3(0, 2.2, 0))
+    }
+
+    // A rival that lost a life rejoins near the fight instead of popping up on
+    // the far side of the island.
+    revivePosition(bot)
+    {
+        const random = this.game.config.random
+        const player = this.game.physicalVehicle.position
+
+        for(let attempt = 0; attempt < 320; attempt++)
+        {
+            const angle = random() * Math.PI * 2
+            const radius = 26 + random() * 18
+            const ground = this.navigation.sample(player.x + Math.cos(angle) * radius, player.z + Math.sin(angle) * radius)
+            if(!ground) continue
+
+            const position = ground.clone().add(new THREE.Vector3(0, 1.7, 0))
+            if(this.items.some(other => other !== bot && other.state !== 'waiting' && other.vehicle.position.distanceTo(position) < 10)) continue
 
             let occupied = false
             this.game.physics.world.intersectionsWithShape(
@@ -126,15 +224,19 @@ export class RivalVehicles
 
             return position
         }
+
         return null
     }
 
-    respawn(bot)
+    respawn(bot, anchor = null)
     {
         if(bot.vehicle.destroyed && !this.canReviveBot(bot))
             return false
 
-        const position = this.spawnPosition(bot)
+        const reviving = bot.vehicle.destroyed
+        const position = reviving
+            ? (this.revivePosition(bot) ?? this.spawnPosition(bot))
+            : this.spawnPosition(bot, anchor)
         bot.nextSpawn = this.time + 2
         if(!position)
             return false
@@ -265,8 +367,20 @@ export class RivalVehicles
         return powerups.nearestFor(vehicle)
     }
 
-    // Keep three rivals on the player while two farm; promote/demote as cars
-    // die, revive, or the map runs out of pickups.
+    // 3 chasers up to five rivals; a large pack (6–7) keeps 4.
+    chaseSquadSize(total = this.items.length)
+    {
+        const profile = this.profile
+        if(!profile?.chaseSquad)
+            return 0
+
+        return profile.chaseSquadLarge && total >= (profile.largeSquadAt ?? 6)
+            ? profile.chaseSquadLarge
+            : profile.chaseSquad
+    }
+
+    // Keep three (or four) rivals on the player while the rest farm; promote
+    // and demote as cars die, revive, or the map runs out of pickups.
     updateRoles(force = false)
     {
         if(!this.profile?.chaseSquad)
@@ -284,7 +398,7 @@ export class RivalVehicles
         const distance = bot => bot.vehicle.position.distanceToSquared(player)
         const collectible = this.game.world.powerups?.items?.some(item => item.active) ?? false
 
-        let desired = Math.min(this.profile.chaseSquad, alive.length)
+        let desired = Math.min(this.chaseSquadSize(), alive.length)
         // Nothing left to farm: the whole pack joins the hunt.
         if(!collectible)
             desired = alive.length
@@ -501,7 +615,7 @@ export class RivalVehicles
         }
         if(position.y < ground - 3)
         {
-            if(this.time >= bot.nextSpawn && !this.respawn(bot))
+            if(this.time >= bot.nextSpawn && !this.respawn(bot, vehicle.position))
             {
                 vehicle.deactivate()
                 bot.state = 'waiting'
@@ -519,7 +633,7 @@ export class RivalVehicles
                 vehicle.flip.jump()
                 bot.lastFlip = this.time
             }
-            if(bot.upsideTime > 7 + vehicle.recoveryDelay) this.respawn(bot)
+            if(bot.upsideTime > 7 + vehicle.recoveryDelay) this.respawn(bot, vehicle.position)
             return
         }
 
@@ -673,7 +787,7 @@ export class RivalVehicles
         if(bot.stuckTime > profile.stuckLimit || (distance < 3.2 && vehicle.speed < 2)) this.reverse(bot)
         if(bot.recoveries >= 4)
         {
-            this.respawn(bot)
+            this.respawn(bot, vehicle.position)
             return
         }
         if(vehicle.speed > 2 && bot.stuckTime === 0) bot.recoveries = 0

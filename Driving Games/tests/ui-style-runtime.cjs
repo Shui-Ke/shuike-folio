@@ -1,0 +1,92 @@
+const { chromium } = require('C:/Users/KLJ/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright')
+const { spawn } = require('node:child_process')
+const path = require('node:path')
+const assert = require('node:assert/strict')
+
+;(async () => {
+    const root = path.resolve(__dirname, '..')
+    const server = spawn(process.execPath, ['node_modules/vite/bin/vite.js', '--host', '127.0.0.1', '--port', '4190', '--strictPort', '--open=false'], { cwd: root, windowsHide: true, stdio: 'ignore' })
+    let browser
+    try {
+        for(let i = 0; i < 60; i++) { try { if((await fetch('http://127.0.0.1:4190')).ok) break } catch {} await new Promise(r => setTimeout(r, 200)) }
+        browser = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true, args: ['--enable-unsafe-webgpu', '--enable-unsafe-swiftshader', '--use-angle=swiftshader'] })
+        const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, hasTouch: true })
+        const errors = []
+        page.on('pageerror', e => errors.push(e.message))
+        await page.route('**/index.js*', async route => {
+            if(new URL(route.request().url()).pathname !== '/index.js') return route.continue()
+            const response = await route.fetch()
+            await route.fulfill({ response, body: await response.text() + '\nwindow.uiGame=Game.getInstance();' })
+        })
+        await page.goto('http://127.0.0.1:4190/?time=0.05')
+        await page.locator('.setup-screen:not([hidden])').waitFor({ timeout: 150000 })
+        const shot = async name => {
+            await page.evaluate(async () => { if(window.uiGame?.reveal?.step === 2) await window.uiGame.rendering.render() })
+            await page.screenshot({ animations: 'disabled', path: path.join(root, `previews/ui-${name}.png`) })
+        }
+        await shot('setup-desktop')
+        await page.locator('[data-setup-field="paint"] [data-value]').nth(1).click()
+        assert.equal(await page.locator('[data-setup-field="paint"] [data-value]').nth(1).getAttribute('aria-pressed'), 'true')
+        await page.setViewportSize({ width: 390, height: 844 })
+        await page.locator('.rotate-screen:not([hidden])').waitFor()
+        await shot('rotate-mobile')
+        await page.evaluate(() => {
+            document.documentElement.requestFullscreen = async () => { throw new Error('Fullscreen unavailable in this browser') }
+            if(screen.orientation) screen.orientation.lock = async () => { throw new Error('Orientation lock unavailable') }
+        })
+        await page.locator('.rotate-screen button').tap()
+        await page.waitForFunction(() => document.querySelector('[data-rotate-message]').textContent.includes('手动'))
+        await page.setViewportSize({ width: 844, height: 390 })
+        await page.locator('.rotate-screen').waitFor({ state: 'hidden' })
+        await shot('setup-mobile')
+        await page.locator('[data-setup-start]').click()
+        await page.waitForFunction(() => window.uiGame?.world?.powerups?.started && window.uiGame.reveal.step === 2, null, { timeout: 150000 })
+        await page.evaluate(() => window.uiGame.rendering.renderer.setAnimationLoop(null))
+        await page.evaluate(() => { window.uiGame.inputs.pointer.upcomingDown = true; window.uiGame.inputs.nipple.active = true })
+        await page.setViewportSize({ width: 390, height: 844 })
+        await page.locator('.rotate-screen:not([hidden])').waitFor()
+        const paused = await page.evaluate(() => {
+            const g = window.uiGame, before = g.world.items.clock, position = g.physicalVehicle.position.clone()
+            g.ticker.update((g.ticker.elapsed + 1) * 1000)
+            return g.mobileOrientation.pauseHeld && g.world.items.clock === before && position.equals(g.physicalVehicle.position) && !g.inputs.pointer.upcomingDown && !g.inputs.nipple.active
+        })
+        assert.ok(paused, 'Portrait rotation prompt must pause gameplay')
+        await page.setViewportSize({ width: 844, height: 390 })
+        await page.waitForFunction(() => !window.uiGame.mobileOrientation.blocked && !window.uiGame.mobileOrientation.pauseHeld)
+        await page.evaluate(() => window.uiGame.world.items.updateHud())
+        const jet = page.locator('[data-item="jetpack"]')
+        await jet.tap()
+        assert.equal(await page.evaluate(() => window.uiGame.world.items.state(window.uiGame.physicalVehicle).counts.jetpack), 3)
+        assert.equal(await page.locator('.item-slots button:not([hidden])').count(), 3)
+        await jet.tap()
+        assert.equal(await page.evaluate(() => window.uiGame.world.items.state(window.uiGame.physicalVehicle).counts.jetpack), 2)
+        assert.equal(await page.locator('.item-slots .selected').evaluate(el => getComputedStyle(el).opacity), '1')
+        assert.equal(await page.locator('.item-controls').evaluate(el => getComputedStyle(el).display), 'none')
+        await shot('hud-mobile')
+        assert.ok(await page.evaluate(() => {
+            const item = document.querySelector('.item-hud').getBoundingClientRect()
+            const stats = document.querySelector('.upgrade-hud').getBoundingClientRect()
+            const roster = document.querySelector('.match-roster').getBoundingClientRect()
+            return item.left >= 0 && item.right <= innerWidth && item.bottom <= innerHeight && stats.right <= roster.left
+        }), 'Mobile HUD must fit without overlapping the roster')
+        await page.setViewportSize({ width: 1440, height: 900 })
+        await shot('hud-desktop')
+        await page.locator('[data-esc-open]').click()
+        await page.locator('[data-esc-tab="weather"]').click()
+        await page.locator('[data-esc-weather="clear"]').click()
+        await shot('settings-desktop')
+        await page.setViewportSize({ width: 844, height: 390 })
+        await page.locator('[data-esc-tab="audio"]').click()
+        await shot('settings-mobile')
+        assert.ok(await page.locator('[data-esc-panel="audio"]').isVisible())
+        await page.keyboard.press('Escape')
+        assert.ok(await page.locator('.esc-menu').isHidden())
+        await page.evaluate(() => window.uiGame.match.end('lost'))
+        await shot('result-mobile')
+        await page.setViewportSize({ width: 1440, height: 900 })
+        await shot('result-desktop')
+        assert.equal(await page.locator('.item-hud').evaluate(el => getComputedStyle(el).pointerEvents), 'none')
+        assert.deepEqual(errors, [])
+        console.log('PASS: setup selection/start, desktop/mobile HUD layout, settings tabs/close, result screen and browser errors.')
+    } finally { if(browser) await browser.close(); server.kill() }
+})().catch(error => { console.error(error); process.exitCode = 1 })

@@ -2,7 +2,7 @@ import { alea } from 'seedrandom'
 import { ITEM_TYPES } from './ItemDefinitions.js'
 
 const STORAGE_KEY = 'driving-games:setup'
-const BOT_LIMIT = 5
+const BOT_LIMIT = 7
 
 // One row of pickups per type (3 upgrades + consumables) is spawned for each
 // unit of `items`, so the setup screen can report a real total.
@@ -111,7 +111,7 @@ export const DIFFICULTIES = {
     },
     extreme: {
         label: '极限',
-        description: '双命 · 3 追 2 搜 · 集火',
+        description: '双命 · 3+2 或 4+3 · 集火',
         revives: 0,
         frenzy: true,
         frenzyRange: 65,
@@ -139,6 +139,8 @@ export const DIFFICULTIES = {
         botLives: 2,
         focusPlayer: true,
         chaseSquad: 3,
+        chaseSquadLarge: 4,
+        largeSquadAt: 6,
         roleRefresh: 2,
         buffRange: 60,
         heavyRam: true,

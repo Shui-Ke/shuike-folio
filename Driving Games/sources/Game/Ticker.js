@@ -29,6 +29,13 @@ export class Ticker
     update(elapsed)
     {
         const elapsedSeconds = elapsed / 1000
+        this.game.mobileOrientation?.syncPause()
+        if(this.game.mobileOrientation?.blocked && this.game.reveal?.step === 2) {
+            // Consume wall time without advancing physics, pickups or recovery.
+            this.elapsed = elapsedSeconds
+            this.delta = this.deltaScaled = 0
+            return
+        }
         this.delta = Math.min(elapsedSeconds - this.elapsed, this.maxDelta)
         this.elapsed = elapsedSeconds
         this.deltaScaled = this.delta * this.scale

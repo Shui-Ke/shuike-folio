@@ -3,6 +3,7 @@ import * as THREE from 'three/webgpu'
 import { Debug } from './Debug.js'
 import { Config } from './Config.js'
 import { SetupScreen } from './SetupScreen.js'
+import { MobileOrientation } from './MobileOrientation.js'
 import { Match } from './Match.js'
 import { BotRadar } from './BotRadar.js'
 import { Roster } from './Roster.js'
@@ -77,6 +78,7 @@ export class Game
         // Setup
         this.domElement = document.querySelector('.game')
         this.canvasElement = this.domElement.querySelector('.js-canvas')
+        this.mobileOrientation = new MobileOrientation(this)
         this.config = new Config()
         document.documentElement.classList.add('is-started')
 

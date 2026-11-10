@@ -44,7 +44,7 @@ export class SetupScreen
                     <section class="setup-field" data-setup-field="bots">
                         <h2>02 / 人机数量</h2>
                         <div class="setup-choices" role="group" aria-label="人机数量">
-                            ${[0, 1, 2, 3, 4, 5].map(count => `
+                            ${[0, 1, 2, 3, 4, 5, 6, 7].map(count => `
                                 <button class="setup-choice" type="button" data-value="${count}" aria-pressed="false">
                                     <b>${count}</b><small>${count === 0 ? '单人' : `${count} 辆`}</small>
                                 </button>`).join('')}
@@ -153,6 +153,7 @@ export class SetupScreen
             return
 
         const values = { ...this.values }
+        this.game.mobileOrientation?.requestLandscape()
         this.close()
         this.onConfirm?.(values)
     }

@@ -289,8 +289,10 @@ const assert = require('node:assert/strict')
             for(let i = 0; i < 90; i++) items.smoke.update(1/60)
             return remainsAfterImpact && items.smoke.activeCount === 0 && !items.smoke.mesh.visible
         }))
-        await page.setViewportSize({ width: 390, height: 844 })
+        await page.setViewportSize({ width: 844, height: 390 })
         await renderFrames()
+        await page.evaluate(() => { const items = window.itemGame.world.items; items.selected = 0; items.updateHud() })
+        await page.locator('[data-item="jetpack"]').tap()
         await page.locator('[data-item="jetpack"]').tap()
         const mobile = await page.evaluate(() => {
             const g = window.itemGame, hud = g.world.items.hud.getBoundingClientRect(), s = g.world.items.state(g.physicalVehicle)

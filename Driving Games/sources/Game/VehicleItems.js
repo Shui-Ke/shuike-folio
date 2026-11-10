@@ -65,8 +65,8 @@ export class VehicleItems
         this.buttons.forEach((button, index) => button.addEventListener('click', event => {
             event.stopPropagation()
             if(!this.running()) return
-            this.selected = index
-            this.use(this.game.physicalVehicle, ITEM_TYPES[index].type)
+            if(this.selected === index) this.use(this.game.physicalVehicle, ITEM_TYPES[index].type)
+            else this.selected = index
             button.blur()
             this.updateHud()
         }))
@@ -91,12 +91,18 @@ export class VehicleItems
         this.hud.hidden = this.game.reveal.step !== 2 || !!this.game.escMenu?.isOpen
         this.buttons.forEach((button, index) => {
             const type = ITEM_TYPES[index].type
+            const offset = (index - this.selected + ITEM_TYPES.length) % ITEM_TYPES.length
+            const side = offset === 0 ? 'current' : offset === 1 ? 'next' : offset === ITEM_TYPES.length - 1 ? 'previous' : 'hidden'
+            button.dataset.position = side
+            button.hidden = side === 'hidden'
+            button.setAttribute('aria-label', `${this.selected === index ? '使用' : '选择'}${ITEM_TYPES[index].title}`)
             button.classList.toggle('selected', this.selected === index)
             button.setAttribute('aria-pressed', String(this.selected === index))
             button.querySelector('[data-count]').textContent = state.counts[type]
             const cooldown = type === 'shield' && !state.shield && state.nextShield > this.clock
-            button.disabled = state.counts[type] === 0 || !this.running() || !this.alive(vehicle) || cooldown
+            button.disabled = !this.running() || !this.alive(vehicle) || (this.selected === index && (state.counts[type] === 0 || cooldown))
         })
+        this.hud.style.setProperty('--selected-item-color', ITEM_TYPES[this.selected].color)
         const statuses = []
         if(state.slowUntil > this.clock) statuses.push(`减速 ${Math.ceil(state.slowUntil - this.clock)}s`)
         if(state.shield) statuses.push(`护盾 ${state.shield.charges}/3`)
@@ -130,6 +136,14 @@ export class VehicleItems
             return this.alive(focus) && vehicle.position.distanceTo(focus.position) <= 80 ? focus : null
 
         return this.vehicles().filter(other => other !== vehicle).sort((a, b) => a.position.distanceToSquared(vehicle.position) - b.position.distanceToSquared(vehicle.position))[0] ?? null
+    }
+
+    // A trap only pays off when the target is actually behind the car.
+    targetIsBehind(vehicle, target)
+    {
+        const dx = target.position.x - vehicle.position.x
+        const dz = target.position.z - vehicle.position.z
+        return dx * vehicle.forward.x + dz * vehicle.forward.z < -2
     }
 
     // Where the current arc is about to put the car: water counts as lethal.
@@ -343,14 +357,10 @@ export class VehicleItems
 
     startJet(vehicle)
     {
-        const mesh = this.model('jetpack', 0.75)
-        if(!mesh) return false
         if(vehicle.launch) vehicle.launch.active = false
         const state = this.state(vehicle), body = vehicle.chassis.physical.body, velocity = body.linvel()
-        state.jet = { mesh, until: this.clock + 1.2, jumps: vehicle.upgrades.maxJumps }
-        mesh.position.copy(vehicle.position).add(new THREE.Vector3(-0.6, 0.8, 0).applyQuaternion(vehicle.quaternion))
-        mesh.quaternion.copy(vehicle.quaternion)
-        this.game.scene.add(mesh)
+        // No backpack prop: only the flight effect (pulses + lift) remains.
+        state.jet = { until: this.clock + 1.2, jumps: vehicle.upgrades.maxJumps, lastPulse: -1 }
         body.setLinvel({ x: velocity.x, y: Math.max(velocity.y, 12), z: velocity.z }, true)
         vehicle.jumpState.airborne = true
         vehicle.jumpState.jetFlight = true
@@ -497,7 +507,7 @@ export class VehicleItems
     {
         const state = this.state(vehicle)
         this.removeShield(vehicle)
-        state.jet?.mesh.removeFromParent(); state.jet = null
+        state.jet = null
         vehicle.jumpState.jetFlight = false
         state.slowUntil = 0; state.blockedContacts.clear(); state.recentHits.clear()
     }
@@ -528,9 +538,7 @@ export class VehicleItems
             if(state.shield) state.shield.mesh.position.copy(vehicle.position).add(new THREE.Vector3(0, 0.1, 0))
             if(state.jet) {
                 const { jet } = state
-                jet.mesh.position.copy(vehicle.position).add(new THREE.Vector3(-0.6, 0.8, 0).applyQuaternion(vehicle.quaternion))
-                jet.mesh.quaternion.copy(vehicle.quaternion)
-                if(this.clock >= jet.until) { jet.mesh.removeFromParent(); state.jet = null }
+                if(this.clock >= jet.until) state.jet = null
                 else {
                     const body = vehicle.chassis.physical.body, velocity = body.linvel()
                     if(velocity.y < 7) body.setLinvel({ x: velocity.x, y: 7, z: velocity.z }, true)
@@ -545,9 +553,32 @@ export class VehicleItems
                 const frenzied = this.game.world.rivals?.isFrenzied?.(vehicle) ?? false
                 state.nextAI = this.clock + (frenzied ? 0.55 : (profile?.itemInterval ?? 4) + Math.random() * (profile?.itemRandom ?? 3))
                 const target = this.nearest(vehicle), distance = target?.position.distanceTo(vehicle.position) ?? Infinity
-                const preferred = frenzied && distance < 45 ? 'missile' : distance < 7 && !state.shield ? 'shield' : distance < 8 ? 'jetpack' : distance < 45 ? 'missile' : 'caltrop'
-                const choices = [preferred, 'crate', 'caltrop', 'missile', 'jetpack']
-                for(const type of choices) if(this.use(vehicle, type)) break
+                let choice = null
+
+                if(target)
+                {
+                    const canShield = !state.shield && this.clock >= state.nextShield && state.counts.shield > 0
+                    const canMissile = state.counts.missile > 0 && distance > 8 && distance < 45
+                    const behind = this.targetIsBehind(vehicle, target)
+                    const canTrap = behind && distance < 24 && this.clock >= (state.nextTrap ?? 0)
+
+                    // One deliberate action per decision; the jetpack is reserved
+                    // for the emergency bailout and never used as an opener.
+                    if(frenzied && canMissile)
+                        choice = 'missile'
+                    else if(distance < 9 && canShield)
+                        choice = 'shield'
+                    else if(canMissile && distance > 12)
+                        choice = 'missile'
+                    else if(canTrap)
+                        choice = state.counts.crate > 0 ? 'crate' : state.counts.caltrop > 0 ? 'caltrop' : null
+                }
+
+                if(choice && this.use(vehicle, choice))
+                {
+                    if(choice === 'crate' || choice === 'caltrop')
+                        state.nextTrap = this.clock + 9
+                }
             }
         }
         for(const entity of this.entities) if(!entity.removed) this.updateEntity(entity, dt, vehicles)
