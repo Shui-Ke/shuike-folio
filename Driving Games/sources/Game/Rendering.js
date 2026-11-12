@@ -4,12 +4,14 @@ import { bloom } from 'three/addons/tsl/display/BloomNode.js'
 import { Game } from './Game.js'
 import { cheapDOF } from './Passes/cheapDOF.js'
 import { Inspector } from 'three/addons/inspector/Inspector.js'
+import { RuntimeFailure } from './RuntimeFailure.js'
 
 export class Rendering
 {
     constructor()
     {
         this.game = Game.getInstance()
+        this.failure = new RuntimeFailure(this.game)
 
         if(this.game.debug.active)
         {
@@ -26,7 +28,7 @@ export class Rendering
 
         this.game.ticker.events.on('tick', () =>
         {
-            this.render()
+            this.render().catch(error => this.failure.capture(error, 'render'))
         }, 998)
 
         this.game.viewport.events.on('change', () =>
@@ -65,7 +67,10 @@ export class Rendering
         }
 
         // Make the renderer control the ticker
-        this.renderer.setAnimationLoop((elapsedTime) => { this.game.ticker.update(elapsedTime) })
+        this.renderer.setAnimationLoop((elapsedTime) => {
+            try { this.game.ticker.update(elapsedTime) }
+            catch(error) { this.failure.capture(error, 'update') }
+        })
 
         return this.renderer
             .init()

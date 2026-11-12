@@ -7,6 +7,7 @@ import { VehicleNavigation } from './VehicleNavigation.js'
 import { speedWhiteValue } from '../VehicleUpgrades.js'
 import { ITEM_TYPES } from '../ItemDefinitions.js'
 import { PICKUP_WEIGHTS } from '../Config.js'
+import { t } from '../I18n.js'
 
 const TYPES = [
     { type: 'power', file: 'power-plus', title: 'POWER+', color: '#ffb64f' },
@@ -183,8 +184,9 @@ export class Powerups
         if(vehicle === this.game.physicalVehicle)
         {
             const stats = vehicle.upgrades
-            const message = maxed ? `${item.title} 已拾取 · 已满级，属性不变` : item.consumable ? `${item.title} +1 · 按 E 使用` : item.type === 'power' ? `POWER+ ${stats.power}/5 · 撞击 ×${stats.powerMultiplier}` :
-                item.type === 'speed' ? `SPEED+ ${stats.speed}/2 · 速度 ×${stats.speedMultiplier}` : 'JUMP×2 · 再按一次空格可二段跳'
+            const itemTitle = t(`item.${item.type}`)
+            const message = maxed ? t('powerup.maxed', { item: itemTitle }) : item.consumable ? t('powerup.consumable', { item: itemTitle }) : item.type === 'power' ? t('powerup.power', { level: stats.power, multiplier: stats.powerMultiplier }) :
+                item.type === 'speed' ? t('powerup.speed', { level: stats.speed, multiplier: stats.speedMultiplier }) : t('powerup.jump')
             this.toast.textContent = message
             this.toast.style.color = item.color
             this.toastAnimation?.cancel()
@@ -202,7 +204,7 @@ export class Powerups
         this.hud.hidden = this.game.reveal.step !== 2
         const values = { power: `POWER ${stats.power}/5 · ×${stats.powerMultiplier}`, speed: `SPEED ${stats.speed}/2 · ×${stats.speedMultiplier}`,
             jump: `JUMP ${Math.max(0, stats.maxJumps - vehicle.jumpState.used)}/${stats.maxJumps}`,
-            velocity: `速度 ${speedWhiteValue(vehicle.xzSpeed || 0, stats.speedMultiplier, vehicle.drivingSpeedRange.normal, vehicle.drivingSpeedRange.boost).toFixed(1)} / ${5 * stats.speedMultiplier}` }
+            velocity: t('powerup.velocity', { value: speedWhiteValue(vehicle.xzSpeed || 0, stats.speedMultiplier, vehicle.drivingSpeedRange.normal, vehicle.drivingSpeedRange.boost).toFixed(1), max: 5 * stats.speedMultiplier }) }
         for(const [key, value] of Object.entries(values))
         {
             const node = this.hud.querySelector(`[data-stat="${key}"]`)

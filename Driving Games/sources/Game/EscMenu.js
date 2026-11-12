@@ -1,4 +1,5 @@
 import { Howler } from 'howler'
+import { i18n } from './I18n.js'
 
 const STORAGE_KEY = 'landscape-test:settings'
 
@@ -46,6 +47,7 @@ export class EscMenu
         if(this.settings.permanentDay)
             this.game.dayCycles?.override.start({ progress: TIME_PRESETS.noon }, 0)
         this.syncAll()
+        i18n.events.on('change', () => this.syncLanguage())
 
         this.liveTimer = window.setInterval(() =>
         {
@@ -77,6 +79,7 @@ export class EscMenu
                         <button class="esc-tab" type="button" data-esc-tab="quality"><span>03</span>Quality</button>
                         <button class="esc-tab" type="button" data-esc-tab="camera"><span>04</span>Camera</button>
                         <button class="esc-tab" type="button" data-esc-tab="audio"><span>05</span>Audio</button>
+                        <button class="esc-tab" type="button" data-esc-tab="language"><span>06</span>Language</button>
                     </nav>
 
                     <div class="esc-menu__body">
@@ -175,6 +178,21 @@ export class EscMenu
                                     <strong data-esc-volume-label>80%</strong>
                                 </div>
                                 <input class="esc-range" data-esc-volume type="range" min="0" max="100" step="1" value="80">
+                            </div>
+                        </section>
+
+                        <section class="esc-panel" data-esc-panel="language">
+                            <h3>Language</h3>
+                            <p class="esc-panel__intro">Choose the in-game language. The setup screen follows this choice on the next load; settings stay in English.</p>
+                            <div class="esc-choice-grid">
+                                <button class="esc-choice" type="button" data-esc-language="en">
+                                    <strong>English</strong>
+                                    <small>EN · default</small>
+                                </button>
+                                <button class="esc-choice" type="button" data-esc-language="cn">
+                                    <strong>中文</strong>
+                                    <small>CN · 简体中文</small>
+                                </button>
                             </div>
                         </section>
                     </div>
@@ -291,6 +309,14 @@ export class EscMenu
             button.addEventListener('click', () =>
             {
                 this.setCamera(button.dataset.escCamera)
+            })
+        }
+
+        for(const button of this.element.querySelectorAll('[data-esc-language]'))
+        {
+            button.addEventListener('click', () =>
+            {
+                this.setLanguage(button.dataset.escLanguage)
             })
         }
 
@@ -418,6 +444,18 @@ export class EscMenu
             button.classList.toggle('is-active', button.dataset.escCamera === this.settings.camera)
     }
 
+    setLanguage(language)
+    {
+        i18n.setLanguage(language)
+        this.syncLanguage()
+    }
+
+    syncLanguage()
+    {
+        for(const button of this.element.querySelectorAll('[data-esc-language]'))
+            button.classList.toggle('is-active', button.dataset.escLanguage === i18n.language)
+    }
+
     setTimePreset(name)
     {
         const value = TIME_PRESETS[name]
@@ -519,6 +557,7 @@ export class EscMenu
         this.syncWeather()
         this.syncQuality()
         this.syncCamera()
+        this.syncLanguage()
         this.syncDay()
         this.syncAudio()
     }

@@ -7,7 +7,7 @@ const CAMP_CENTER = { x: 31.3, z: 70.4 }
 const CAMP_OFFSET = { x: -14, z: -72 }
 
 /**
- * Camp layout saved from the scene editor (峡谷营地.json).
+ * Camp layout saved from the scene editor.
  * Trees use the game's native tree bodies and Bruno's Foliage leaf clusters,
  * so their canopies are built from the foliage SDF cards rather than the
  * coarse leaf meshes that ship with the wasteland library.

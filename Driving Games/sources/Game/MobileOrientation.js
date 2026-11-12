@@ -1,4 +1,5 @@
 import gsap from 'gsap'
+import { i18n, t } from './I18n.js'
 
 export class MobileOrientation
 {
@@ -12,12 +13,13 @@ export class MobileOrientation
         this.element.hidden = true
         this.element.innerHTML = `<section class="rotate-screen__panel" role="dialog" aria-modal="true" aria-labelledby="rotate-title">
             <div class="rotate-screen__phone" aria-hidden="true">↻</div>
-            <h2 id="rotate-title">横屏开战</h2>
-            <p data-rotate-message>请将手机横过来，获得完整视野和操作空间。</p>
-            <button type="button">尝试切换横屏</button>
+            <h2 id="rotate-title">${t('rotate.title')}</h2>
+            <p data-rotate-message>${t('rotate.message')}</p>
+            <button type="button">${t('rotate.button')}</button>
         </section>`
         game.domElement.append(this.element)
         this.element.querySelector('button').addEventListener('click', () => this.requestLandscape())
+        i18n.events.on('change', () => this.syncLanguage())
         for(const name of ['pointerdown', 'pointerup', 'touchstart', 'touchend', 'click'])
             this.element.addEventListener(name, event => event.stopPropagation())
         window.addEventListener('resize', () => this.update())
@@ -66,6 +68,13 @@ export class MobileOrientation
         }
     }
 
+    syncLanguage()
+    {
+        this.element.querySelector('#rotate-title').textContent = t('rotate.title')
+        this.element.querySelector('[data-rotate-message]').textContent = t('rotate.message')
+        this.element.querySelector('button').textContent = t('rotate.button')
+    }
+
     async requestLandscape()
     {
         if(!this.isMobile() || this.requesting) return
@@ -80,7 +89,7 @@ export class MobileOrientation
         finally {
             this.requesting = false
             this.update()
-            if(this.blocked) this.element.querySelector('[data-rotate-message]').textContent = '请手动将手机横过来；若画面没有旋转，请开启系统自动旋转。'
+            if(this.blocked) this.element.querySelector('[data-rotate-message]').textContent = t('rotate.blocked')
         }
     }
 }

@@ -3,13 +3,13 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 
 const items = [
-    { file: 'caltrop', title: '铁蒺藜', detail: '四向尖刺 · 纯深灰', colors: ['#3e3e3e'] },
-    { file: 'missile', title: '导弹', detail: '八面弹体 · 十字尾翼', colors: ['#fff0ce', '#ff842e', '#e94243'] },
-    { file: 'jetpack', title: '喷气背包', detail: '双罐结构 · 双喷口', colors: ['#e94243', '#352b42', '#ffcc58'] },
-    { file: 'shield', title: '护盾', detail: '灰色盾面 · 棱面金属', colors: ['#999999', '#555555', '#3e3e3e'] },
-    { file: 'power-plus', title: 'POWER+', detail: '橙色立体字 · 深色描边', colors: ['#fff0ce', '#ff842e', '#352b42'] },
-    { file: 'jump-times-two', title: 'JUMP×2', detail: '青色立体字 · 深色描边', colors: ['#fff0ce', '#56c9bd', '#352b42'] },
-    { file: 'speed-plus', title: 'SPEED+', detail: '金色立体字 · 深色描边', colors: ['#fff0ce', '#ffcc58', '#352b42'] },
+    { file: 'caltrop', title: 'Caltrop', detail: 'Four-way spikes · deep grey', colors: ['#3e3e3e'] },
+    { file: 'missile', title: 'Missile', detail: 'Octagonal body · cross fins', colors: ['#fff0ce', '#ff842e', '#e94243'] },
+    { file: 'jetpack', title: 'Jetpack', detail: 'Twin tanks · twin nozzles', colors: ['#e94243', '#352b42', '#ffcc58'] },
+    { file: 'shield', title: 'Shield', detail: 'Grey face · faceted metal', colors: ['#999999', '#555555', '#3e3e3e'] },
+    { file: 'power-plus', title: 'POWER+', detail: 'Orange 3D letters · dark outline', colors: ['#fff0ce', '#ff842e', '#352b42'] },
+    { file: 'jump-times-two', title: 'JUMP×2', detail: 'Cyan 3D letters · dark outline', colors: ['#fff0ce', '#56c9bd', '#352b42'] },
+    { file: 'speed-plus', title: 'SPEED+', detail: 'Gold 3D letters · dark outline', colors: ['#fff0ce', '#ffcc58', '#352b42'] },
 ]
 window.propsPreviewState = { ready: false, models: [], errors: [] }
 const loader = new GLTFLoader()
@@ -18,7 +18,7 @@ const grid = document.querySelector('.grid')
 await Promise.all(items.map(async (item, index) => {
     const card = document.createElement('article')
     card.className = 'card'
-    card.innerHTML = `<div class="label"><span class="number">0${index + 1}</span><h2>${item.title}</h2></div><div class="viewer" aria-label="${item.title}，可旋转的三维模型"></div><div class="caption"><span>${item.detail}</span><span class="swatches">${item.colors.map(color => `<i style="background:${color}"></i>`).join('')}</span></div>`
+    card.innerHTML = `<div class="label"><span class="number">0${index + 1}</span><h2>${item.title}</h2></div><div class="viewer" aria-label="${item.title}, rotatable 3D model"></div><div class="caption"><span>${item.detail}</span><span class="swatches">${item.colors.map(color => `<i style="background:${color}"></i>`).join('')}</span></div>`
     grid.append(card)
     const viewport = card.querySelector('.viewer')
     try {
@@ -78,7 +78,7 @@ await Promise.all(items.map(async (item, index) => {
         resize()
         window.propsPreviewState.models.push({ name: item.file, dimensions: size.toArray() })
     } catch(error) {
-        viewport.textContent = '模型暂时无法加载'
+        viewport.textContent = 'Model unavailable for now'
         window.propsPreviewState.errors.push(error.message)
     }
 }))

@@ -1,6 +1,7 @@
 import * as THREE from 'three/webgpu'
 import { Game } from './Game.js'
 import { Player } from './Player.js'
+import { i18n, t } from './I18n.js'
 
 export class VehicleDamage
 {
@@ -13,14 +14,23 @@ export class VehicleDamage
         this.hint.className = 'vehicle-damage-hint'
         this.hint.hidden = true
         this.hint.setAttribute('role', 'status')
-        this.hint.innerHTML = '<strong>车辆损坏</strong><span>车身已完全没入水中</span><button type="button">按 R 复活</button>'
+        this.buildHint()
+        this.game.domElement.append(this.hint)
+        this.game.ticker.events.on('tick', () => this.update(), 6)
+        i18n.events.on('change', () => this.buildHint())
+    }
+
+    buildHint()
+    {
+        this.hint.innerHTML = `<strong>${t('damage.title')}</strong><span>${t('damage.reason')}</span><button type="button">${t('damage.revive')}</button>`
         this.hint.querySelector('button').addEventListener('click', () =>
         {
             if(this.game.physicalVehicle.destroyed && !this.game.escMenu?.isOpen)
                 this.game.match?.revive()
         })
-        this.game.domElement.append(this.hint)
-        this.game.ticker.events.on('tick', () => this.update(), 6)
+
+        if(!this.hint.hidden)
+            this.game.match?.syncHint()
     }
 
     register(vehicle, visual, isPlayer = false)

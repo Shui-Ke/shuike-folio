@@ -3,6 +3,7 @@ import { Fn, uv, float } from 'three/tsl'
 import { Game } from './Game.js'
 import { ITEM_TYPES } from './ItemDefinitions.js'
 import { MissileSmoke } from './World/MissileSmoke.js'
+import { i18n, t } from './I18n.js'
 
 const SHIELD_COOLDOWN = 12
 
@@ -22,6 +23,23 @@ export class VehicleItems
         this.blocked = new Set()
         this.setupHud()
         this.game.ticker.events.on('tick', () => this.update(), 7)
+        i18n.events.on('change', () => this.syncLanguage())
+    }
+
+    syncLanguage()
+    {
+        this.hud.setAttribute('aria-label', t('items.hudAria'))
+
+        this.buttons.forEach((button, index) =>
+        {
+            const type = ITEM_TYPES[index].type
+            button.querySelector('span').textContent = t(`item.${type}`)
+            button.setAttribute('aria-label', t(this.selected === index ? 'items.use' : 'items.select', { item: t(`item.${type}`) }))
+        })
+
+        this.hud.querySelector('.item-keyboard').textContent = t('items.ctrlKeyboard')
+        this.hud.querySelector('.item-touch').textContent = t('items.ctrlTouch')
+        this.updateHud()
     }
 
     state(vehicle)
@@ -58,8 +76,8 @@ export class VehicleItems
     {
         this.hud = document.createElement('div')
         this.hud.className = 'item-hud'
-        this.hud.setAttribute('aria-label', '道具栏')
-        this.hud.innerHTML = `<div class="item-status" role="status"></div><div class="item-slots">${ITEM_TYPES.map((item, index) => `<button type="button" data-item="${item.type}" style="--item-color:${item.color}" aria-label="使用${item.title}"><svg viewBox="0 0 64 64" aria-hidden="true">${item.icon}</svg><span>${item.title}</span><b data-count>3</b></button>`).join('')}</div><div class="item-controls"><span class="item-keyboard">← → 切换 · E 使用</span><span class="item-touch">点击道具使用</span></div>`
+        this.hud.setAttribute('aria-label', t('items.hudAria'))
+        this.hud.innerHTML = `<div class="item-status" role="status"></div><div class="item-slots">${ITEM_TYPES.map((item, index) => `<button type="button" data-item="${item.type}" style="--item-color:${item.color}" aria-label="${t('items.use', { item: t(`item.${item.type}`) })}"><svg viewBox="0 0 64 64" aria-hidden="true">${item.icon}</svg><span>${t(`item.${item.type}`)}</span><b data-count>3</b></button>`).join('')}</div><div class="item-controls"><span class="item-keyboard">${t('items.ctrlKeyboard')}</span><span class="item-touch">${t('items.ctrlTouch')}</span></div>`
         this.game.domElement.append(this.hud)
         this.buttons = [...this.hud.querySelectorAll('button')]
         this.buttons.forEach((button, index) => button.addEventListener('click', event => {
@@ -95,7 +113,7 @@ export class VehicleItems
             const side = offset === 0 ? 'current' : offset === 1 ? 'next' : offset === ITEM_TYPES.length - 1 ? 'previous' : 'hidden'
             button.dataset.position = side
             button.hidden = side === 'hidden'
-            button.setAttribute('aria-label', `${this.selected === index ? '使用' : '选择'}${ITEM_TYPES[index].title}`)
+            button.setAttribute('aria-label', t(this.selected === index ? 'items.use' : 'items.select', { item: t(`item.${type}`) }))
             button.classList.toggle('selected', this.selected === index)
             button.setAttribute('aria-pressed', String(this.selected === index))
             button.querySelector('[data-count]').textContent = state.counts[type]
@@ -104,10 +122,10 @@ export class VehicleItems
         })
         this.hud.style.setProperty('--selected-item-color', ITEM_TYPES[this.selected].color)
         const statuses = []
-        if(state.slowUntil > this.clock) statuses.push(`减速 ${Math.ceil(state.slowUntil - this.clock)}s`)
-        if(state.shield) statuses.push(`护盾 ${state.shield.charges}/3`)
-        else if(state.nextShield > this.clock) statuses.push(`护盾冷却 ${Math.ceil(state.nextShield - this.clock)}s`)
-        if(state.jet) statuses.push(`喷气 · 可跳跃 ${state.jet.jumps} 次`)
+        if(state.slowUntil > this.clock) statuses.push(t('items.slow', { seconds: Math.ceil(state.slowUntil - this.clock) }))
+        if(state.shield) statuses.push(t('items.shieldCharges', { charges: state.shield.charges }))
+        else if(state.nextShield > this.clock) statuses.push(t('items.shieldCooldown', { seconds: Math.ceil(state.nextShield - this.clock) }))
+        if(state.jet) statuses.push(t('items.jet', { jumps: state.jet.jumps }))
         this.hud.querySelector('.item-status').textContent = this.clock < (this.messageUntil ?? 0) ? this.message : statuses.join(' · ')
     }
 
@@ -193,10 +211,10 @@ export class VehicleItems
         if(!this.running() || !this.alive(vehicle)) return false
         const state = this.state(vehicle)
         if(!state.counts[type] || this.clock < state.nextUse) return false
-        if(type === 'shield' && state.shield) { this.notify(vehicle, '护盾仍在生效'); return false }
+        if(type === 'shield' && state.shield) { this.notify(vehicle, t('items.shieldActive')); return false }
         if(type === 'shield' && this.clock < state.nextShield)
         {
-            this.notify(vehicle, `护盾冷却 ${Math.ceil(state.nextShield - this.clock)}s`)
+            this.notify(vehicle, t('items.shieldCooldown', { seconds: Math.ceil(state.nextShield - this.clock) }))
             return false
         }
         if(type === 'jetpack' && state.jet) return false
@@ -218,7 +236,7 @@ export class VehicleItems
         const position = vehicle.position.clone().addScaledVector(direction, -4 * vehicle.scale)
         const ground = this.game.world.powerups.navigation.groundAt(position.x, position.z)
         if(ground === null || this.game.water.depthAt({ x: position.x, y: ground, z: position.z }) > 0.15 || vehicle.position.y - ground > 4) {
-            this.notify(vehicle, '需要在陆地附近放置'); return false
+            this.notify(vehicle, t('items.placeLand')); return false
         }
         position.y = ground + (type === 'crate' ? 0.65 : 0.05)
         const mesh = this.model(type, type === 'crate' ? 1.2 : 0.9)
@@ -239,7 +257,7 @@ export class VehicleItems
     fireMissile(vehicle)
     {
         const target = this.nearest(vehicle)
-        if(!target) { this.notify(vehicle, '没有可追踪的车辆'); return false }
+        if(!target) { this.notify(vehicle, t('items.noTarget')); return false }
         const mesh = this.model('missile', 0.65)
         if(!mesh) return false
         const position = vehicle.position.clone().add(new THREE.Vector3(0, 1.9 * vehicle.scale, 0))
@@ -255,7 +273,7 @@ export class VehicleItems
         const side = new THREE.Vector3(-target.forward.z, 0, target.forward.x)
         const routeSide = position.clone().sub(target.position).dot(side) >= 0 ? 1 : -1
         this.entities.push({ id: ++this.serial, type: 'missile', owner: vehicle, target, mesh, marker, exhaust: mesh.getObjectByName('exhaust-core'), position, direction, age: 0, speed: 2, acceleration: 5, lifetime: 14, tracking: true, pursuit: false, routeSide })
-        this.notify(vehicle, '导弹已锁定 · 同色圆环标记目标')
+        this.notify(vehicle, t('items.missileLocked'))
         return true
     }
 
@@ -299,7 +317,7 @@ export class VehicleItems
         state.shield.charges--
         state.recentHits.set(key, this.clock + 0.6)
         this.blocked.add(vehicle)
-        this.notify(vehicle, `护盾抵挡 · 剩余 ${state.shield.charges} 次`)
+        this.notify(vehicle, t('items.shieldBlock', { charges: state.shield.charges }))
         this.pulse(vehicle.position, 3.5, '#ffffff')
         return true
     }
@@ -440,7 +458,7 @@ export class VehicleItems
                     if(vehicle.launch) vehicle.launch.active = false
                     vehicle.jumpState.airOffset.set(0, 0, 0)
                     this.state(vehicle).slowUntil = this.clock + 15
-                    this.notify(vehicle, '铁蒺藜命中 · 减速 15s')
+                    this.notify(vehicle, t('items.caltropHit'))
                 }
                 this.removeEntity(entity); break
             }

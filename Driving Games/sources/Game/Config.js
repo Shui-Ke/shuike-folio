@@ -21,28 +21,26 @@ export function pickupTotalFor(perType)
 }
 
 export const PAINTS = [
-    { name: 'red',     label: '赤红', top: '#ff3a3a', bottom: '#721551' },
-    { name: 'orange',  label: '橙焰', top: '#ff9a3c', bottom: '#a83c00' },
-    { name: 'white',   label: '霜白', top: '#ffffff', bottom: '#9aa3b2' },
-    { name: 'black',   label: '夜黑', top: '#4a4f5c', bottom: '#101218' },
-    { name: 'magenta', label: '品红', top: '#ff4fd8', bottom: '#6b0a5e' },
-    { name: 'gold',    label: '流金', top: '#ffc247', bottom: '#7a3d00' },
+    { name: 'red', top: '#ff3a3a', bottom: '#721551' },
+    { name: 'orange', top: '#ff9a3c', bottom: '#a83c00' },
+    { name: 'white', top: '#ffffff', bottom: '#9aa3b2' },
+    { name: 'black', top: '#4a4f5c', bottom: '#101218' },
+    { name: 'magenta', top: '#ff4fd8', bottom: '#6b0a5e' },
+    { name: 'gold', top: '#ffc247', bottom: '#7a3d00' },
 ]
 
 export const ITEM_PRESETS = [
-    { label: '关闭', perType: 0 },
-    { label: '稀疏', perType: 2 },
-    { label: '标准', perType: 5 },
-    { label: '密集', perType: 8 },
-    { label: '混乱', perType: 11 },
+    { perType: 0 },
+    { perType: 2 },
+    { perType: 5 },
+    { perType: 8 },
+    { perType: 11 },
 ]
 
 // Driving numbers only. Physics stays shared with the player so difficulty
 // never turns into a speed cheat; `normal` is the neutral baseline.
 export const DIFFICULTIES = {
     easy: {
-        label: '简单',
-        description: '转向迟钝 · 不用道具 · 可复活 1 次',
         revives: 1,
         frenzy: false,
         botItems: false,
@@ -67,8 +65,6 @@ export const DIFFICULTIES = {
         itemRandom: 4,
     },
     normal: {
-        label: '普通',
-        description: '原始手感 · 一命通关',
         revives: 0,
         frenzy: false,
         botItems: true,
@@ -93,8 +89,6 @@ export const DIFFICULTIES = {
         itemRandom: 3,
     },
     hard: {
-        label: '困难',
-        description: '预判走位 · 包夹 · 乘胜追击',
         revives: 0,
         frenzy: true,
         frenzyRange: 60,
@@ -122,8 +116,6 @@ export const DIFFICULTIES = {
         botLives: 1,
     },
     extreme: {
-        label: '极限',
-        description: '双命 · 3+2 或 4+3 · 集火',
         revives: 0,
         frenzy: true,
         frenzyRange: 65,

@@ -1,6 +1,7 @@
 import gsap from 'gsap'
 import { Game } from './Game.js'
 import { Player } from './Player.js'
+import { i18n, t } from './I18n.js'
 
 // Lives / match end. Easy is the only difficulty that grants a second car;
 // every other difficulty ends the run on the first destruction.
@@ -16,6 +17,7 @@ export class Match
         this.buildHud()
         this.buildResult()
         this.game.ticker.events.on('tick', () => this.update(), 9)
+        i18n.events.on('change', () => this.syncLanguage())
     }
 
     get canRevive()
@@ -41,7 +43,7 @@ export class Match
         this.hud = document.createElement('div')
         this.hud.className = 'match-hud'
         this.hud.hidden = true
-        this.hud.innerHTML = `<span class="match-hud__label">生命</span><span class="match-hud__lives"></span>`
+        this.hud.innerHTML = `<span class="match-hud__label">${t('match.lives')}</span><span class="match-hud__lives"></span>`
         this.livesElement = this.hud.querySelector('.match-hud__lives')
         this.game.domElement.append(this.hud)
         this.syncHud()
@@ -56,12 +58,12 @@ export class Match
             <div class="match-overlay__backdrop"></div>
             <section class="match-panel" role="dialog" aria-modal="true" aria-labelledby="match-title">
                 <div class="match-panel__eyebrow" data-match-eyebrow>MATCH OVER</div>
-                <h2 class="match-panel__title" id="match-title" data-match-title>你被淘汰了</h2>
-                <p class="match-panel__text" data-match-text>车已完全沉入水中。</p>
+                <h2 class="match-panel__title" id="match-title" data-match-title>${t('match.titleLost')}</h2>
+                <p class="match-panel__text" data-match-text>${t('match.textLost')}</p>
                 <p class="match-panel__meta" data-match-meta></p>
                 <div class="match-panel__actions">
-                    <button class="match-button match-button--primary" type="button" data-match-retry>再来一局</button>
-                    <button class="match-button" type="button" data-match-setup>修改设置</button>
+                    <button class="match-button match-button--primary" type="button" data-match-retry>${t('match.retry')}</button>
+                    <button class="match-button" type="button" data-match-setup>${t('match.changeSetup')}</button>
                 </div>
             </section>
         `
@@ -90,7 +92,7 @@ export class Match
         hint.hidden = false
         const button = hint.querySelector('button')
         if(button)
-            button.textContent = `按 R 复活 · 剩余 ${this.lives} 条命`
+            button.textContent = t('match.reviveHint', { lives: this.lives })
     }
 
     hideHint()
@@ -166,28 +168,47 @@ export class Match
         if(result === 'won')
             this.game.player.state = Player.STATE_LOCKED
 
+        this.syncResult()
+        this.element.hidden = false
+        document.documentElement.classList.add('match-ended')
+    }
+
+    syncResult()
+    {
         const title = this.element.querySelector('[data-match-title]')
         const eyebrow = this.element.querySelector('[data-match-eyebrow]')
         const text = this.element.querySelector('[data-match-text]')
         const meta = this.element.querySelector('[data-match-meta]')
-        const difficulty = this.game.config?.profile?.label ?? '普通'
+        const difficulty = t(`difficulty.${this.game.config.difficulty}`)
 
-        if(result === 'won')
+        if(this.result === 'won')
         {
             eyebrow.textContent = 'MATCH WON'
-            title.textContent = '最后的赢家'
-            text.textContent = '所有人机都被淘汰了。'
+            title.textContent = t('match.titleWon')
+            text.textContent = t('match.textWon')
         }
         else
         {
             eyebrow.textContent = 'MATCH OVER'
-            title.textContent = '你被淘汰了'
-            text.textContent = this.lives > 0 ? '车辆完全沉入水中。' : '车辆完全沉入水中，生命已经用完。'
+            title.textContent = t('match.titleLost')
+            text.textContent = this.lives > 0 ? t('match.textLost') : t('match.textLostLives')
         }
 
-        meta.textContent = `难度 · ${difficulty} · 生命 ${this.lives} / ${this.maxLives}`
-        this.element.hidden = false
-        document.documentElement.classList.add('match-ended')
+        meta.textContent = t('match.meta', { difficulty, lives: this.lives, maxLives: this.maxLives })
+    }
+
+    syncLanguage()
+    {
+        this.hud.querySelector('.match-hud__label').textContent = t('match.lives')
+        this.element.querySelector('[data-match-retry]').textContent = t('match.retry')
+        this.element.querySelector('[data-match-setup]').textContent = t('match.changeSetup')
+
+        if(this.ended)
+            this.syncResult()
+
+        const hint = this.game.world.vehicleDamage?.hint
+        if(hint && !hint.hidden)
+            this.syncHint()
     }
 
     retry()

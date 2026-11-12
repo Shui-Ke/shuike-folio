@@ -1,5 +1,6 @@
 import { Game } from './Game.js'
 import { PAINTS } from './Config.js'
+import { i18n, t } from './I18n.js'
 
 const BOT_LABELS = {
     blue: 'Blue',
@@ -21,6 +22,7 @@ export class Roster
         this.paintKey = null
         this.build()
         this.game.ticker.events.on('tick', () => this.update(), 8)
+        i18n.events.on('change', () => this.rebuild())
     }
 
     build()
@@ -30,11 +32,12 @@ export class Roster
         this.element.hidden = true
         this.element.innerHTML = `
             <div class="match-roster__title">
-                <span>存活</span><b data-roster-alive>0</b><span>/</span><b data-roster-total>0</b>
+                <span>${t('roster.alive')}</span><b data-roster-alive>0</b><span>/</span><b data-roster-total>0</b>
             </div>
             <ul class="match-roster__list"></ul>
         `
         this.list = this.element.querySelector('.match-roster__list')
+        this.titleLabel = this.element.querySelector('.match-roster__title span')
         this.aliveElement = this.element.querySelector('[data-roster-alive]')
         this.totalElement = this.element.querySelector('[data-roster-total]')
         this.game.domElement.append(this.element)
@@ -55,9 +58,10 @@ export class Roster
     {
         this.list.innerHTML = ''
         this.rows = []
+        this.titleLabel.textContent = t('roster.alive')
 
         const paint = PAINTS.find(item => item.name === this.game.config.paint) ?? PAINTS[0]
-        this.addRow(this.game.physicalVehicle, 'You', paint.top, true)
+        this.addRow(this.game.physicalVehicle, t('roster.you'), paint.top, true)
 
         for(const bot of this.game.world.rivals?.items ?? [])
             this.addRow(bot.vehicle, BOT_LABELS[bot.color] ?? bot.color, bot.colorCss ?? '#ffffff', false, bot)
@@ -100,12 +104,12 @@ export class Roster
                 else if(game.match?.canRevive)
                 {
                     state = 'revive'
-                    text = '待复活'
+                    text = t('roster.awaiting')
                 }
                 else
                 {
                     state = 'dead'
-                    text = '淘汰'
+                    text = t('roster.eliminated')
                 }
             }
             else
@@ -116,9 +120,9 @@ export class Roster
                 if(!destroyed)
                 {
                     state = 'alive'
-                    const parts = ['存活']
+                    const parts = [t('roster.alive')]
                     if(bot && this.game.config.profile?.chaseSquad)
-                        parts.push(bot.role === 'chase' ? '追' : '搜')
+                        parts.push(bot.role === 'chase' ? t('roster.chase') : t('roster.collect'))
                     if(bot && bot.lives > 1)
                         parts.push(`×${bot.lives}`)
                     text = parts.join('·')
@@ -128,13 +132,13 @@ export class Roster
                 {
                     // Waiting out the two-second respawn with a spare life.
                     state = 'revive'
-                    text = '复活中'
+                    text = t('roster.reviving')
                     alive++
                 }
                 else
                 {
                     state = 'dead'
-                    text = '淘汰'
+                    text = t('roster.eliminated')
                 }
             }
 

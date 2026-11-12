@@ -1,5 +1,6 @@
 import { Game } from './Game.js'
 import { PAINTS, ITEM_PRESETS, DIFFICULTIES, pickupTotalFor } from './Config.js'
+import { t } from './I18n.js'
 
 // Pre-match setup shown where the old "click to start" prompt was. Everything
 // it writes lives in Config, so the world is built from one source of truth and
@@ -25,57 +26,57 @@ export class SetupScreen
             <section class="setup-panel" role="dialog" aria-modal="true" aria-labelledby="setup-title">
                 <header class="setup-panel__header">
                     <div class="setup-panel__eyebrow">DRIVING GAMES / MATCH SETUP</div>
-                    <h1 class="setup-panel__title" id="setup-title">选择这一局</h1>
-                    <p class="setup-panel__lead">你和人机都会在全地图随机位置出生。选好配置，开始比赛。</p>
+                    <h1 class="setup-panel__title" id="setup-title">${t('setup.title')}</h1>
+                    <p class="setup-panel__lead">${t('setup.lead')}</p>
                 </header>
 
                 <div class="setup-grid">
                     <section class="setup-field" data-setup-field="paint">
-                        <h2>01 / 车辆颜色</h2>
-                        <div class="setup-swatches" role="group" aria-label="车辆颜色">
+                        <h2>${t('setup.paint')}</h2>
+                        <div class="setup-swatches" role="group" aria-label="${t('setup.paintAria')}">
                             ${PAINTS.map(paint => `
                                 <button class="setup-swatch" type="button" data-value="${paint.name}" aria-pressed="false">
                                     <span class="setup-swatch__chip" style="--paint-top:${paint.top};--paint-bottom:${paint.bottom}"></span>
-                                    <span>${paint.label}</span>
+                                    <span>${t(`paint.${paint.name}`)}</span>
                                 </button>`).join('')}
                         </div>
                     </section>
 
                     <section class="setup-field" data-setup-field="bots">
-                        <h2>02 / 人机数量</h2>
-                        <div class="setup-choices" role="group" aria-label="人机数量">
+                        <h2>${t('setup.bots')}</h2>
+                        <div class="setup-choices" role="group" aria-label="${t('setup.botsAria')}">
                             ${[0, 1, 2, 3, 4, 5, 6, 7].map(count => `
                                 <button class="setup-choice" type="button" data-value="${count}" aria-pressed="false">
-                                    <b>${count}</b><small>${count === 0 ? '单人' : `${count} 辆`}</small>
+                                    <b>${count}</b><small>${count === 0 ? t('setup.solo') : count === 1 ? t('setup.car') : t('setup.cars', { count })}</small>
                                 </button>`).join('')}
                         </div>
                     </section>
 
                     <section class="setup-field" data-setup-field="difficulty">
-                        <h2>03 / 人机难度</h2>
-                        <div class="setup-cards" role="group" aria-label="人机难度">
-                            ${Object.entries(DIFFICULTIES).map(([name, profile]) => `
+                        <h2>${t('setup.difficulty')}</h2>
+                        <div class="setup-cards" role="group" aria-label="${t('setup.difficultyAria')}">
+                            ${Object.keys(DIFFICULTIES).map(name => `
                                 <button class="setup-card" type="button" data-value="${name}" aria-pressed="false">
-                                    <b>${profile.label}</b>
-                                    <small>${profile.description}</small>
+                                    <b>${t(`difficulty.${name}`)}</b>
+                                    <small>${t(`difficulty.${name}Desc`)}</small>
                                 </button>`).join('')}
                         </div>
                     </section>
 
                     <section class="setup-field" data-setup-field="items">
-                        <h2>04 / 道具分布</h2>
-                        <div class="setup-choices setup-choices--wide" role="group" aria-label="道具分布">
+                        <h2>${t('setup.items')}</h2>
+                        <div class="setup-choices setup-choices--wide" role="group" aria-label="${t('setup.itemsAria')}">
                             ${ITEM_PRESETS.map(preset => `
                                 <button class="setup-choice" type="button" data-value="${preset.perType}" aria-pressed="false">
-                                    <b>${preset.label}</b><small>${pickupTotalFor(preset.perType)} 个</small>
+                                    <b>${t(`items.${preset.perType}`)}</b><small>${t('setup.itemsCount', { count: pickupTotalFor(preset.perType) })}</small>
                                 </button>`).join('')}
                         </div>
                     </section>
                 </div>
 
                 <footer class="setup-panel__footer">
-                    <p class="setup-panel__hint">W A S D 驾驶 · Shift 加速 · Space 跳跃 · E 使用道具 · Esc 设置</p>
-                    <button class="setup-start" type="button" data-setup-start>开始比赛</button>
+                    <p class="setup-panel__hint">${t('setup.hint')}</p>
+                    <button class="setup-start" type="button" data-setup-start>${t('setup.start')}</button>
                 </footer>
             </section>
         `

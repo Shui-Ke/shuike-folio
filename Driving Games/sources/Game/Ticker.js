@@ -29,6 +29,10 @@ export class Ticker
     update(elapsed)
     {
         const elapsedSeconds = elapsed / 1000
+        // Never pass an absent, repeated or backwards frame time into Rapier.
+        // A zero step produces invalid vehicle speeds; a negative step can
+        // make the wheel solver panic and poison subsequent physics calls.
+        if(!Number.isFinite(elapsedSeconds) || elapsedSeconds <= this.elapsed) return
         this.game.mobileOrientation?.syncPause()
         if(this.game.mobileOrientation?.blocked && this.game.reveal?.step === 2) {
             // Consume wall time without advancing physics, pickups or recovery.
