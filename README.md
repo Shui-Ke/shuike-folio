@@ -2,6 +2,9 @@
 
 [English](#english) · [中文](#中文)
 
+**Built on Bruno Simon's [folio-2025](https://github.com/brunosimon/folio-2025) (MIT).** The models, the art and parts of the base engine come from it; the game layer is mine.
+基于 **Bruno Simon 的 [folio-2025](https://github.com/brunosimon/folio-2025)（MIT）** 二次创作：模型、美术和部分基础引擎来自该项目，游戏层为本人编写。
+
 ---
 
 ## English
